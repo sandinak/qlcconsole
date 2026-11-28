@@ -106,14 +106,15 @@ void SurfaceBoardLog::watchPlugin(QLCIOPlugin *plugin)
     m_watched << plugin;
     /* From the plugin's own thread (CoreMIDI's): queued here, every value
        as it came, before the input patch gathers them into one per frame. */
+    /* By name: every plugin DLL has its own QLCIOPlugin, so on Windows a
+       pointer-to-member connection to it never fires (dllsignals_test). */
     connect(plugin, SIGNAL(valueChanged(quint32,quint32,quint32,uchar,QString)),
             this, SLOT(slotPluginValue(quint32,quint32,quint32,uchar,QString)));
 }
 
 void SurfaceBoardLog::slotPluginValue(quint32, quint32 input, quint32 channel, uchar value, const QString &)
 {
-    QLCIOPlugin *plugin = qobject_cast<QLCIOPlugin *>(sender());
-    if (plugin != nullptr)
+    if (QLCIOPlugin *plugin = qobject_cast<QLCIOPlugin *>(sender()))
         slotRawInput(plugin, input, channel, value);
 }
 

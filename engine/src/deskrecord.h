@@ -484,6 +484,11 @@ private:
     bool m_gmMoved = false;
     int m_gmSettleMs = 150;
     qint64 m_gmRefusedNoteAt = -100000;   ///< when the board log last said a move was not taken
+    qint64 m_elsewhereSaidAt = -100000;   ///< when a board's own STOP/GM last said it is another's
+    /** A board's own STOP key or Grand Master fader (its layout's default)
+     *  touched while that role is another device's on this computer: said,
+     *  never silent. True when it was said. */
+    bool sayRoleElsewhere(quint32 universe, quint32 channel, uchar value, quint64 k);
     QTimer *m_gmSettle = nullptr;
     /** The universes whose board has its Shift key held. */
     QSet<quint32> m_shiftDown;

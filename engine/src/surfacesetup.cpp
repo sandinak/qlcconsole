@@ -378,6 +378,15 @@ void SurfaceSetup::slotPatchChanged(quint32 universe)
     if (m_modeWait.remove(universe))
         holdPresses(universe, false);
     m_checks.remove(universe);
+    /* One patch says both "patched" and "its profile" (setInputPatch()):
+       the init that went for the first goes again when the port has
+       settled, never twice back to back (the virtual bench, 2026-11-27:
+       the APC40 mkII was sent Ableton mode four times on a plug). */
+    if (m_initAgain.contains(universe))
+    {
+        emit changed(universe);
+        return;
+    }
     if (sendInit(universe, tr("on patch")))
     {
         /* Once more when the port has settled: a board just plugged in may

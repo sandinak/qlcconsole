@@ -814,7 +814,10 @@ bool InputOutputMap::setOutputPatch(quint32 universe, const QString &pluginName,
        have run. (A frame write that hangs is not covered: iodeferral.h.) */
     IODeferral io;
     const bool done = patchOutput(universe, pluginName, outputUID, output, isFeedback, index, params);
-    return io.finish() && done;
+    const bool opened = io.finish();
+    if (isFeedback && done)
+        emit feedbackPatchChanged(universe);
+    return opened && done;
 }
 
 bool InputOutputMap::patchOutput(quint32 universe, const QString &pluginName,
@@ -2342,6 +2345,45 @@ void InputOutputMap::followInputDevices(QLCIOPlugin *plugin)
         emit offlinePatchesChanged();
 }
 
+void InputOutputMap::followFeedbackDevices(QLCIOPlugin *plugin)
+{
+    const QStringList lines = plugin->outputs();
+    bool kept = false;
+    for (quint32 i = 0; i < universesCount(); i++)
+    {
+        Universe *uni = m_universeArray.at(i);
+        OutputPatch *fp = uni->feedbackPatch();
+        if (fp == NULL || fp->plugin() != plugin || fp->output() == QLCIOPlugin::invalidLine())
+            continue;
+        const QString port = fp->openedLineName();
+        if (port.isEmpty() || lines.value(int(fp->output())) == port)
+            continue;   // where it was: reconnect() is enough
+        const int line = int(lines.indexOf(port));
+        if (line >= 0)
+        {
+            qDebug() << "[IOMAP] universe" << i + 1 << "feedback" << port
+                     << "moved from line" << fp->output() << "to" << line;
+            setOutputPatch(i, plugin->name(), port, quint32(line), true);
+            continue;
+        }
+        /* Gone: kept as the show describes it, back by itself when the
+           port is (retryOfflinePatches()), never on whatever now has its
+           old line. */
+        qDebug() << "[IOMAP] universe" << i + 1 << "feedback" << port << "disconnected: kept offline";
+        Universe::OfflinePatch rec;
+        rec.tag = Universe::FeedbackPatchTag;
+        rec.plugin = plugin->name();
+        rec.uid = port;
+        rec.line = fp->output();
+        rec.params = fp->getPluginParameters();
+        setOutputPatch(i, KOutputNone, QString(), 0, true);
+        uni->addOfflinePatch(rec);
+        kept = true;
+    }
+    if (kept)
+        emit offlinePatchesChanged();
+}
+
 bool InputOutputMap::hasFreeInputDevice(QLCIOPlugin *plugin, const QString &name) const
 {
     if (plugin == NULL)
@@ -2636,6 +2678,7 @@ void InputOutputMap::slotPluginConfigurationChanged(QLCIOPlugin* plugin)
     if (plugin->linesAreHardware())
     {
         followInputDevices(plugin);
+        followFeedbackDevices(plugin);
         applyInputSlots();
     }
 

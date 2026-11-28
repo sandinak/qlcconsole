@@ -100,8 +100,7 @@ signals:
     void logged(quint32 universe);
 
 private slots:
-    /** A plugin's raw value (connected by name: every plugin DLL has its own
-     *  QLCIOPlugin, so a pointer-to-member never matches on Windows). */
+    /** A plugin's raw value (connected by name: plugin DLLs). */
     void slotPluginValue(quint32 universe, quint32 input, quint32 channel, uchar value, const QString &key);
 
 private:
