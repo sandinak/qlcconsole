@@ -39,6 +39,7 @@
 #include <QPainter>
 #include <QProgressDialog>
 #include <QRegularExpression>
+#include <QScopeGuard>
 #include <QTabBar>
 #include <QTabWidget>
 #include <QTemporaryDir>

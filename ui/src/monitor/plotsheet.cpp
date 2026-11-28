@@ -363,9 +363,9 @@ void PlotSheet::paintTo(QPagedPaintDevice *device) const
     p.setRenderHint(QPainter::Antialiasing);
     p.setRenderHint(QPainter::TextAntialiasing);
     // One unit = one point, from the top-left of the printable area.
-    const QRectF paint = device->pageLayout().paintRectPoints();
+    const QRectF area = device->pageLayout().paintRectPoints();
     // One scale both ways: a printer's paper may not be the sheet's.
-    const double k = qMin(device->width() / paint.width(), device->height() / paint.height());
+    const double k = qMin(device->width() / area.width(), device->height() / area.height());
     p.scale(k, k);
     this->paint(&p);
 }
@@ -533,7 +533,8 @@ void PlotSheet::paintSymbol(QPainter *p, const QRectF &cell, quint32 fid) const
             p->translate(-br.center());
             QStyleOptionGraphicsItem opt;
             opt.exposedRect = br;
-            item->paint(p, &opt, nullptr);
+            // Through QGraphicsItem: the item's own override is protected.
+            static_cast<QGraphicsItem *>(item)->paint(p, &opt, nullptr);
         }
     }
     p->restore();
