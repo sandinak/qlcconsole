@@ -117,23 +117,20 @@ int ControlMap::songStep(int dir) const
     /* Each step's song, in the order the list plays them (a running order
        moves the steps, never the cues: Q190 ro). A cue with sub-cues plays
        their chaser as its step. */
+    // What each step plays -> its cue's song: one walk of each, not one per pair.
+    QHash<quint32, int> songOfFunction;
+    for (int i = 0; i < list->cues.size(); ++i)
+    {
+        const ShowTree::Cue &c = list->cues.at(i);
+        const int sec = ShowTree::sectionOfIndex(sections, i);
+        songOfFunction.insert(c.collection, sec);
+        if (const ShowTree::CueList *subs = st->cueList(st->subCueList(c.id)))
+            songOfFunction.insert(subs->chaser, sec);
+    }
     QVector<int> song(chaser->stepsCount(), -1);
     for (int s = 0; s < chaser->stepsCount(); ++s)
-    {
-        const ChaserStep *step = chaser->stepAt(s);
-        if (step == nullptr)
-            continue;
-        for (int i = 0; i < list->cues.size(); ++i)
-        {
-            const ShowTree::Cue &c = list->cues.at(i);
-            const ShowTree::CueList *subs = st->cueList(st->subCueList(c.id));
-            if (c.collection == step->fid || (subs != nullptr && subs->chaser == step->fid))
-            {
-                song[s] = ShowTree::sectionOfIndex(sections, i);
-                break;
-            }
-        }
-    }
+        if (const ChaserStep *step = chaser->stepAt(s))
+            song[s] = songOfFunction.value(step->fid, -1);
     // From the cue playing, else the one GO would play.
     int from = chaser->isRunning() ? chaser->currentStepIndex() : sc->standbyStep(chaser);
     if (from < 0 || from >= song.size())
