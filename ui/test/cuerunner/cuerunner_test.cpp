@@ -82,6 +82,7 @@
 
 #include "cueresume.h"
 #include <QTemporaryDir>
+#include <QScrollBar>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
@@ -2627,6 +2628,52 @@ void CueRunner_Test::resumeOfferShots()
     shoot(QStringLiteral("after-runtab-cue-gone"), { sizes.at(1) });
     runner.hide();
     m_doc->setMode(Doc::Design);
+}
+
+/* The Run tab's list, like the Virtual Console's: the cue on stage walks down
+   to the middle of the view, then the list scrolls; always in sight. */
+void CueRunner_Test::theListFollowsTheCueOnStage()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("Long");
+    const quint32 list = st->addCueList(prod, "Song");
+    for (int i = 0; i < 40; ++i)
+        st->addCue(list, i - 1, QString("Cue %1").arg(i + 1));
+    st->setCurrentProduction(prod);
+    CueRunner runner(m_doc, CueRunner::Full);
+    runner.resize(700, 420);
+    runner.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&runner));
+    QTreeWidget *tree = runner.cueTree();
+    runner.refresh();
+    QApplication::processEvents();
+    QCOMPARE(tree->topLevelItemCount(), 40);
+    const int row = tree->visualItemRect(tree->topLevelItem(0)).height();
+    const int middle = tree->viewport()->height() / 2;
+    QVERIFY(tree->viewport()->height() < 40 * row / 2);
+
+    ShowControl::Request go;
+    go.command = ShowControl::Go;
+    int last = -1;
+    for (int i = 0; i < 40; ++i)
+    {
+        QVERIFY(m_doc->showControl()->run(go, ShowControl::RouteOther));
+        settle();
+        runner.refresh();
+        QApplication::processEvents();
+        QTreeWidgetItem *item = tree->topLevelItem(i);
+        QVERIFY(item->text(0).startsWith(QString::fromUtf8("\u25B6")));
+        const QRect r = tree->visualItemRect(item);
+        QVERIFY2(r.top() >= 0 && r.bottom() < tree->viewport()->height(),
+                 qPrintable(QString("cue %1 is off the page").arg(i + 1)));
+        QVERIFY(r.center().y() >= last);
+        last = r.center().y();
+        if (tree->verticalScrollBar()->value() > 0)
+            QVERIFY2(qAbs(last - middle) <= row, qPrintable(QString("cue %1 at %2, middle %3").arg(i + 1).arg(last).arg(middle)));
+    }
+    // The last cue is in the middle with blank space under it.
+    QVERIFY(qAbs(last - middle) <= row);
+    QVERIFY(tree->itemAt(10, last + row + 2) == nullptr);
 }
 
 QTEST_MAIN(CueRunner_Test)

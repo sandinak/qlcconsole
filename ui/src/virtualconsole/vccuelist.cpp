@@ -41,6 +41,7 @@
 #include "chaserrunner.h"
 #include "mastertimer.h"
 #include "chaserstep.h"
+#include "cuelistfollow.h"
 #include "vccuelist.h"
 #include "outputrulekeeper.h"
 #include "qlcmacros.h"
@@ -152,6 +153,7 @@ VCCueList::VCCueList(QWidget *parent, Doc *doc) : VCWidget(parent, doc)
     /* Create a list for scenes (cues) */
     m_tree = new QTreeWidget(this);
     m_tree->setSelectionMode(QAbstractItemView::SingleSelection);
+    m_follow = new CueListFollow(m_tree);
     //m_tree->setAlternatingRowColors(true);
     m_tree->setAllColumnsShowFocus(true);
     m_tree->setRootIsDecorated(false);
@@ -182,6 +184,8 @@ VCCueList::VCCueList(QWidget *parent, Doc *doc) : VCWidget(parent, doc)
         if (current == NULL || !current->data(COL_NUM, PROP_SECTION).toBool())
         {
             updateSectionLabel();   // the picked cue's song
+            if (current != NULL)
+                m_follow->follow(current);
             return;
         }
         // A click on a header means that song: its first cue. Only the Up key
@@ -1175,7 +1179,7 @@ void VCCueList::slotCurrentStepChanged(int stepNumber)
     QTreeWidgetItem *item = stepItem(stepNumber);
     if (item == NULL)
         return;
-    m_tree->scrollToItem(item, QAbstractItemView::PositionAtCenter);
+    m_follow->follow(item);
     m_tree->setCurrentItem(item);
     m_primaryIndex = stepNumber;
     updateSectionLabel();
@@ -1404,7 +1408,7 @@ void VCCueList::updateSubCueHighlight()
         if (on)
         {
             parent->setExpanded(true);
-            m_tree->scrollToItem(row);
+            m_follow->follow(row);
         }
     };
     const bool updating = m_listIsUpdating;

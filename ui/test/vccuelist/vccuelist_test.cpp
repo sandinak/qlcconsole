@@ -22,6 +22,8 @@
 #include <QXmlStreamWriter>
 #include <QTreeWidgetItem>
 #include <QTreeWidget>
+#include <QScrollBar>
+#include <QDir>
 #include <QHeaderView>
 #include <QSignalSpy>
 #include <QtTest>
@@ -1671,6 +1673,267 @@ void VCCueList_Test::songSectionShots()
         }
     }
     QApplication::setPalette(light);
+}
+
+
+/*
+ * The list follows the active cue (Branson, 2026-11-27): down to the middle,
+ * then the list scrolls; blank space past the last cue; always in sight.
+ */
+namespace {
+Chaser *longChaser(Doc *doc, int cues)
+{
+    Fixture *fxi = new Fixture(doc);
+    fxi->setChannels(1);
+    doc->addFixture(fxi);
+    Scene *s = new Scene(doc);
+    s->setName("Look");
+    s->setValue(fxi->id(), 0, 255);
+    doc->addFunction(s);
+    Chaser *c = new Chaser(doc);
+    for (int i = 0; i < cues; ++i)
+        c->addStep(ChaserStep(s->id()));
+    doc->addFunction(c);
+    return c;
+}
+
+/* The row's centre in the view's own coordinates; -1 when it is not on the page. */
+int rowY(QTreeWidget *tree, QTreeWidgetItem *item)
+{
+    const QRect r = tree->visualItemRect(item);
+    if (!r.isValid() || r.top() < 0 || r.bottom() >= tree->viewport()->height())
+        return -1;
+    return r.center().y();
+}
+} // namespace
+
+void VCCueList_Test::theActiveCueStaysInTheMiddle()
+{
+    Chaser *ch = longChaser(m_doc, 40);
+    m_doc->setMode(Doc::Operate);
+    QWidget w;
+    w.resize(320, 260);
+    VCCueList cl(&w, m_doc);
+    cl.resize(QSize(300, 240));
+    cl.setChaser(ch->id());
+    w.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&w));
+    QTreeWidget *tree = cl.m_tree;
+    QCOMPARE(tree->topLevelItemCount(), 40);
+    QApplication::processEvents();
+    const int row = tree->visualItemRect(tree->topLevelItem(0)).height();
+    const int middle = tree->viewport()->height() / 2;
+    QVERIFY(tree->viewport()->height() < 40 * row / 2);     // a small frame: the list scrolls
+
+    int last = -1;
+    int cuesBeforeMiddle = 0;
+    for (int i = 0; i < 40; ++i)
+    {
+        cl.slotCurrentStepChanged(i);
+        QApplication::processEvents();
+        const int y = rowY(tree, cl.stepItem(i));
+        QVERIFY2(y >= 0, qPrintable(QString("cue %1 is off the page").arg(i)));     // always in sight
+        QVERIFY2(y >= last, qPrintable(QString("cue %1 moved up: %2 after %3").arg(i).arg(y).arg(last)));
+        if (y < middle - row)
+        {
+            // Still on the way down: the list has not scrolled yet.
+            QCOMPARE(tree->verticalScrollBar()->value(), 0);
+            ++cuesBeforeMiddle;
+        }
+        else
+            QVERIFY2(qAbs(y - middle) <= row, qPrintable(QString("cue %1 at %2, middle %3").arg(i).arg(y).arg(middle)));
+        last = y;
+    }
+    QVERIFY(cuesBeforeMiddle > 0);
+    QVERIFY(cuesBeforeMiddle < 20);
+    m_doc->masterTimer()->stopAllFunctions();
+}
+
+void VCCueList_Test::theLastCueReachesTheMiddleOverBlankSpace()
+{
+    Chaser *ch = longChaser(m_doc, 40);
+    m_doc->setMode(Doc::Operate);
+    QWidget w;
+    w.resize(320, 260);
+    VCCueList cl(&w, m_doc);
+    cl.resize(QSize(300, 240));
+    cl.setChaser(ch->id());
+    w.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&w));
+    QTreeWidget *tree = cl.m_tree;
+    QApplication::processEvents();
+    const int row = tree->visualItemRect(tree->topLevelItem(0)).height();
+    const int middle = tree->viewport()->height() / 2;
+
+    cl.slotCurrentStepChanged(39);
+    QApplication::processEvents();
+    const int y = rowY(tree, cl.stepItem(39));
+    QVERIFY(y >= 0);
+    QVERIFY2(qAbs(y - middle) <= row, qPrintable(QString("last cue at %1, middle %2").arg(y).arg(middle)));
+    // Nothing but blank lines below it, and no row was added for them.
+    QCOMPARE(tree->topLevelItemCount(), 40);
+    QVERIFY(tree->itemAt(10, y + row + 2) == NULL);
+    QVERIFY(tree->visualItemRect(cl.stepItem(39)).bottom() < tree->viewport()->height() - row);
+    // Going on up from there: the cue stays put in the middle, blank space shrinking.
+    cl.slotCurrentStepChanged(35);
+    QApplication::processEvents();
+    QVERIFY(qAbs(rowY(tree, cl.stepItem(35)) - middle) <= row);
+    m_doc->masterTimer()->stopAllFunctions();
+}
+
+void VCCueList_Test::backAndJumpsFollowTheSameRule()
+{
+    Chaser *ch = longChaser(m_doc, 40);
+    m_doc->setMode(Doc::Operate);
+    QWidget w;
+    w.resize(320, 260);
+    VCCueList cl(&w, m_doc);
+    cl.resize(QSize(300, 240));
+    cl.setChaser(ch->id());
+    w.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&w));
+    QTreeWidget *tree = cl.m_tree;
+    QApplication::processEvents();
+    const int row = tree->visualItemRect(tree->topLevelItem(0)).height();
+    const int middle = tree->viewport()->height() / 2;
+
+    // Next and Back (Select, stopped) from the middle of the list.
+    cl.setNextPrevBehavior(VCCueList::Select);
+    tree->setCurrentItem(cl.stepItem(20));
+    for (int i = 0; i < 4; ++i)
+    {
+        cl.slotNextCue();
+        QApplication::processEvents();
+        QVERIFY(qAbs(rowY(tree, tree->currentItem()) - middle) <= row);
+    }
+    for (int i = 0; i < 8; ++i)
+    {
+        cl.slotPreviousCue();
+        QApplication::processEvents();
+        QVERIFY(qAbs(rowY(tree, tree->currentItem()) - middle) <= row);
+    }
+    // A click far off the page (the list's own selection, as a click makes it).
+    tree->setCurrentItem(cl.stepItem(38));
+    QApplication::processEvents();
+    QVERIFY(qAbs(rowY(tree, cl.stepItem(38)) - middle) <= row);
+    // Jump back to the top: it sits at the top, not in the middle.
+    tree->setCurrentItem(cl.stepItem(0));
+    QApplication::processEvents();
+    QVERIFY(rowY(tree, cl.stepItem(0)) >= 0);
+    QCOMPARE(tree->verticalScrollBar()->value(), 0);
+    m_doc->masterTimer()->stopAllFunctions();
+}
+
+void VCCueList_Test::aHandOnTheListIsNotFought()
+{
+    Chaser *ch = longChaser(m_doc, 40);
+    m_doc->setMode(Doc::Operate);
+    QWidget w;
+    w.resize(320, 260);
+    VCCueList cl(&w, m_doc);
+    cl.resize(QSize(300, 240));
+    cl.setChaser(ch->id());
+    w.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&w));
+    QTreeWidget *tree = cl.m_tree;
+    QApplication::processEvents();
+    const int row = tree->visualItemRect(tree->topLevelItem(0)).height();
+    const int middle = tree->viewport()->height() / 2;
+    cl.slotCurrentStepChanged(15);
+    QApplication::processEvents();
+    QVERIFY(qAbs(rowY(tree, cl.stepItem(15)) - middle) <= row);
+
+    // The mouse is down on the list (a drag of the scroll bar, a click): a GO
+    // does not move the list under it ...
+    QTest::mousePress(tree->viewport(), Qt::LeftButton, Qt::NoModifier, QPoint(5, 5));
+    tree->verticalScrollBar()->setValue(tree->verticalScrollBar()->value() + 3 * row);
+    const int held = tree->verticalScrollBar()->value();
+    cl.slotCurrentStepChanged(16);
+    QApplication::processEvents();
+    QCOMPARE(tree->verticalScrollBar()->value(), held);
+    QTest::mouseRelease(tree->viewport(), Qt::LeftButton, Qt::NoModifier, QPoint(5, 5));
+    QApplication::processEvents();
+
+    // ... and the next GO re-centres.
+    cl.slotCurrentStepChanged(17);
+    QApplication::processEvents();
+    QVERIFY(qAbs(rowY(tree, cl.stepItem(17)) - middle) <= row);
+    m_doc->masterTimer()->stopAllFunctions();
+}
+
+void VCCueList_Test::songHeadersScrollLikeAnyRow()
+{
+    const quint32 list = threeSongs(m_doc, 13);     // 3 headers + 39 cues
+    QVERIFY(list != ShowTree::invalidId());
+    Chaser *ch = qobject_cast<Chaser *>(m_doc->function(m_doc->showTree()->cueList(list)->chaser));
+    QVERIFY(ch != NULL);
+    m_doc->setMode(Doc::Operate);
+    QWidget w;
+    w.resize(320, 260);
+    VCCueList cl(&w, m_doc);
+    cl.resize(QSize(300, 240));
+    cl.setChaser(ch->id());
+    w.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&w));
+    QTreeWidget *tree = cl.m_tree;
+    QApplication::processEvents();
+    QCOMPARE(tree->topLevelItemCount(), 42);
+    const int row = tree->visualItemRect(tree->topLevelItem(0)).height();
+    const int middle = tree->viewport()->height() / 2;
+
+    for (int i = 0; i < 39; ++i)
+    {
+        cl.slotCurrentStepChanged(i);
+        QApplication::processEvents();
+        const int y = rowY(tree, cl.stepItem(i));
+        QVERIFY2(y >= 0, qPrintable(QString("cue %1 is off the page").arg(i)));
+        if (tree->verticalScrollBar()->value() > 0)
+            QVERIFY2(qAbs(y - middle) <= row, qPrintable(QString("cue %1 at %2, middle %3").arg(i).arg(y).arg(middle)));
+    }
+    // The last cue: in the middle, nothing below it.
+    QVERIFY(qAbs(rowY(tree, cl.stepItem(38)) - middle) <= row);
+    QVERIFY(tree->itemAt(10, rowY(tree, cl.stepItem(38)) + row + 2) == NULL);
+    // A header rolls past like any row: the song's first cue in the middle,
+    // its header just above it.
+    cl.slotCurrentStepChanged(26);      // the third song's first
+    QApplication::processEvents();
+    QVERIFY(qAbs(rowY(tree, cl.stepItem(26)) - middle) <= row);
+    QTreeWidgetItem *header = tree->topLevelItem(tree->indexOfTopLevelItem(cl.stepItem(26)) - 1);
+    QVERIFY(isSectionRow(header));
+    QVERIFY(rowY(tree, header) >= 0);
+    QVERIFY(rowY(tree, header) < rowY(tree, cl.stepItem(26)));
+    m_doc->masterTimer()->stopAllFunctions();
+}
+
+/* The list at the top, in the middle of the show and at the end, at three
+   frame sizes (only when QLC_SHOT_DIR is set; pictures for the review). */
+void VCCueList_Test::followShots()
+{
+    const QString dir = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (dir.isEmpty())
+        QSKIP("QLC_SHOT_DIR not set");
+    QDir().mkpath(dir);
+    shotUseDarkTheme();
+    Chaser *ch = longChaser(m_doc, 40);
+    m_doc->setMode(Doc::Operate);
+    const QSize sizes[] = { QSize(260, 180), QSize(320, 260), QSize(420, 420) };
+    for (const QSize &size : sizes)
+    {
+        QWidget w;
+        w.resize(size + QSize(20, 20));
+        VCCueList cl(&w, m_doc);
+        cl.resize(size);
+        cl.setChaser(ch->id());
+        w.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&w));
+        for (int step : { 0, 5, 20, 39 })
+        {
+            cl.slotCurrentStepChanged(step);
+            QApplication::processEvents();
+            w.grab().save(QString("%1/cuelist-%2x%3-cue%4.png").arg(dir).arg(size.width()).arg(size.height()).arg(step + 1));
+        }
+    }
+    m_doc->masterTimer()->stopAllFunctions();
 }
 
 QTEST_MAIN(VCCueList_Test)

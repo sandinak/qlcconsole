@@ -59,6 +59,13 @@ A **cue list** is a chase (a chaser). Its steps are the **cues**.
 - A **Virtual Console cue list** shows a **Cue** column beside the step
   number and a **Next:** line under its list — the cue, its name and its
   note.
+- **The cue list follows the cue on stage**, in the Virtual Console and on
+  the Run tab. From the top the highlight moves down to the middle of the
+  list; from there the list scrolls and the cue on stage stays in the
+  middle. At the end the list keeps scrolling over blank space, so the last
+  cue reaches the middle too. Back, a click and a jump follow the same way,
+  and a song header scrolls like any row. While your mouse or the wheel is
+  on the list it is left alone; the next GO puts the cue back in the middle.
 - Two GOs a moment apart play one cue: [Two GOs at once](#two-gos-at-once).
 
 ## Two GOs at once

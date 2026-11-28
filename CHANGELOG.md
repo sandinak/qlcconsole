@@ -12,6 +12,10 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ## [Unreleased]
 
+### Fixed
+
+- **Cue lists follow the cue on stage.** The Virtual Console cue list (and the Run tab's) now keeps the active row in sight: it moves down to the middle of the list, then the list scrolls with the cue held in the middle, and at the end blank space lets the last cue reach the middle too. Back, a click or a jump do the same; a hand on the list isn't fought.
+
 ### Added
 
 - **Behaves as** (board Q350, Q351): every fixture is a Light, Machinery,

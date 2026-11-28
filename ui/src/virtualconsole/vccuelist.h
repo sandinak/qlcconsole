@@ -38,6 +38,7 @@ class QLabel;
 
 class VCCueListProperties;
 class ClickAndGoSlider;
+class CueListFollow;
 class ChaserRunner;
 class MasterTimer;
 class Chaser;
@@ -317,6 +318,7 @@ private:
     bool m_listIsUpdating;
     /** A mouse button is down on the list: a section row reached now was
      *  clicked (its song's first cue), not stepped onto with a key. */
+    CueListFollow *m_follow = NULL;
     bool m_treeMouseDown = false;
 
 protected:
