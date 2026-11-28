@@ -1245,6 +1245,10 @@ void ControlMap::slotInputDeviceChanged(quint32 universe)
     // The controller went away or came back: whatever it held is let go (its
     // release never comes), and a first press waiting for its second is dropped.
     m_pending = false;
+    // Its Shift too (Q355 review): a guarded job's second control is a hand
+    // on it now, never one held as the cable went.
+    if (m_shiftDown.remove(universe))
+        slotLampsMayHaveChanged();
     for (const quint64 k : m_swallow.values())
         if (quint32(k >> 32) == universe)
             endSwallow(k);
@@ -1267,6 +1271,7 @@ void ControlMap::slotInputDeviceChanged(quint32 universe)
 void ControlMap::slotInputDeviceBack(quint32 universe)
 {
     m_backAt[universe].start();
+    m_shiftDown.remove(universe);       // as slotInputDeviceChanged()
     for (const quint64 k : m_backHeard.values())
         if (quint32(k >> 32) == universe)
             m_backHeard.remove(k);

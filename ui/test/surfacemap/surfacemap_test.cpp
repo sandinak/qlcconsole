@@ -1456,6 +1456,29 @@ void SurfaceMap_Test::theEmergencyStopEndsAFlash()
     settle();
 }
 
+void SurfaceMap_Test::aShiftHeldAcrossAReplugIsNoShift()
+{
+    SimMidiDevice apc(m_doc, m_stub, QStringLiteral("APC40 mkII"), 0, kApc, profile("Akai-APC40-mkII.qxi"));
+    QVERIFY2(apc.plug(), qPrintable(apc.lastError()));
+    ControlMap *cm = m_doc->controlMap();
+    cm->setDumpWindowMs(0);         // no dump to wait out: every press after the replug counts
+    cm->setBinding({ 0, kClip11, ControlMap::job(ControlMap::BlackoutTarget), ControlMap::Toggle });
+    settle();
+    const QString shift = QStringLiteral("#226");
+    QVERIFY(apc.press(shift));
+    settle();
+    QVERIFY(cm->isShiftHeld(0));
+    // The cable pulled with Shift down: its release never comes.
+    QVERIFY(apc.unplug());
+    settle();
+    QVERIFY(apc.replug());
+    settle();
+    QVERIFY2(!cm->isShiftHeld(0), "a Shift held as the board went away is still held");
+    QVERIFY(apc.tap(QStringLiteral("#%1").arg(kClip11)));
+    settle();
+    QVERIFY2(!m_doc->inputOutputMap()->blackout(), "one press made a blackout after a replug");
+}
+
 void SurfaceMap_Test::theBoardJobsRoundTripThroughTheShowFile()
 {
     SimMidiDevice apc(m_doc, m_stub, QStringLiteral("APC40 mkII"), 0, kApc, profile("Akai-APC40-mkII.qxi"));

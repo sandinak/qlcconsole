@@ -109,6 +109,8 @@ private slots:
     void aFlashLeavesMachineryAlone();
     /** ... the emergency stop lets go of a Flash held through it. */
     void theEmergencyStopEndsAFlash();
+    /** ... a Shift held as the board went away is not held when it is back. */
+    void aShiftHeldAcrossAReplugIsNoShift();
     /** With QLC_SHOT_DIR: the job picker (a key's, its submenu, a fader's)
      *  and the map with board jobs, at three sizes. */
     void jobPickerShots();
