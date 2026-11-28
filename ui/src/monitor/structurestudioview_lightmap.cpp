@@ -319,7 +319,7 @@ QString StructureStudioView::lightMapCaption() const
                                   MeasurementUnits::formatIlluminance(m_lightGrid.darkLux));
     if (m_lightSpots == 0)
         return head + tr(" · no dark spots");
-    return head + tr(" · %n dark spot(s)", nullptr, m_lightSpots);
+    return head + (m_lightSpots == 1 ? tr(" · 1 dark spot") : tr(" · %1 dark spots").arg(m_lightSpots));
 }
 
 void StructureStudioView::drawLightMap(QPainter &p) const

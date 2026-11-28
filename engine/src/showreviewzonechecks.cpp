@@ -1081,8 +1081,8 @@ void pwr14(ReviewContext &ctx, QList<ReviewFinding> &out)
                     print += QByteArray::number(fid) + ',';
                 QString after;
                 if (r.cues > 1)
-                    after = QCoreApplication::translate("ShowReview", " It stays dark for %n more cue(s).",
-                                                        nullptr, r.cues - 1);
+                    after = (r.cues == 2) ? tr(" It stays dark for 1 more cue.")
+                                          : tr(" It stays dark for %1 more cues.").arg(r.cues - 1);
                 out << ReviewContext::make(QStringLiteral("PWR-14"), ReviewFinding::Warning,
                     tr("In %1 the acting area '%2' is dark: about %3 at %4 up, under the %5 the show "
                        "counts as lit.%6 Bring a light up on it or aim one there, or accept it if the "
