@@ -336,7 +336,11 @@ void PlotSheet_Test::thePlanPdfHasTitleKeyCountsAndScaleBar()
     if (!shots.isEmpty())
     {
         sheet.preview(1650).save(QDir(shots).filePath(QStringLiteral("plotsheet-plan-letter.png")));
-        QVERIFY(QFile::copy(path, QDir(shots).filePath(QStringLiteral("plotsheet-plan-letter.pdf"))));
+        // Two legs of a gate may share the shot dir: the last one's copy wins.
+        const QString shotPdf = QDir(shots).filePath(QStringLiteral("plotsheet-plan-letter.pdf"));
+        QFile::remove(shotPdf);
+        if (!QFile::copy(path, shotPdf))
+            qWarning() << "could not copy the PDF shot to" << shotPdf;
     }
 }
 
