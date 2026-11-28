@@ -31,7 +31,11 @@
 #include <memory>
 #include <vector>
 
+#if defined(Q_OS_WIN)
+#include <windows.h>
+#else
 #include <sys/resource.h>
+#endif
 #include <stdlib.h>
 #if defined(Q_OS_MACOS)
 #include <sys/sysctl.h>
@@ -359,16 +363,30 @@ Doc *newDoc(int universes)
 
 double processCpuSeconds()
 {
+#if defined(Q_OS_WIN)
+    FILETIME created, exited, kernel, user;
+    if (!GetProcessTimes(GetCurrentProcess(), &created, &exited, &kernel, &user))
+        return 0.0;
+    auto secs = [](const FILETIME &t) {
+        return double((quint64(t.dwHighDateTime) << 32) | t.dwLowDateTime) / 1.0e7;
+    };
+    return secs(kernel) + secs(user);
+#else
     struct rusage ru;
     getrusage(RUSAGE_SELF, &ru);
     return double(ru.ru_utime.tv_sec + ru.ru_stime.tv_sec)
            + double(ru.ru_utime.tv_usec + ru.ru_stime.tv_usec) / 1.0e6;
+#endif
 }
 
 double loadAverage()
 {
+#if defined(Q_OS_WIN)
+    return -1.0;    // no load average on Windows
+#else
     double load[1] = { -1.0 };
     return getloadavg(load, 1) == 1 ? load[0] : -1.0;
+#endif
 }
 
 int performanceCores()
