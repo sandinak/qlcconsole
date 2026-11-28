@@ -1741,14 +1741,14 @@ QList<SurfaceMaps::Job> SurfaceMaps::jobsFor(quint32 universe, quint32 channel) 
         add(QStringLiteral("back"), tr("Back"), isRole(DeskRecord::Back));
         add(QStringLiteral("stop"), tr("STOP (all off)"), isRole(DeskRecord::Stop));
         add(QStringLiteral("subgo"), tr("Sub GO"), isJob(ControlMap::SubGoTarget, 0));
-        add(QStringLiteral("song-next"), tr("Next song"), isJob(ControlMap::NextSongTarget, 0));
-        add(QStringLiteral("song-prev"), tr("Previous song"), isJob(ControlMap::PreviousSongTarget, 0));
+        add(QStringLiteral("song-next"), tr("Next Song"), isJob(ControlMap::NextSongTarget, 0));
+        add(QStringLiteral("song-prev"), tr("Previous Song"), isJob(ControlMap::PreviousSongTarget, 0));
         // Jump to cue N: GO that cue of the Run tab's list (a cue trigger).
-        const QString jump = tr("Jump to cue");
+        const QString jump = tr("Jump to Cue");
         ShowTreeController *st = m_doc->showTree();
         const ShowTree::CueList *list = st != nullptr ? st->cueList(cm->runList()) : nullptr;
         if (list == nullptr || list->cues.isEmpty())
-            add(QStringLiteral("cue"), tr("Jump to cue (the Run tab's list has no cues)"), false, false);
+            add(QStringLiteral("cue"), tr("Jump to Cue (the Run tab's list has no cues)"), false, false);
         for (int i = 0; list != nullptr && i < list->cues.size(); ++i)
         {
             const ShowTree::Cue &cue = list->cues.at(i);
@@ -1757,13 +1757,13 @@ QList<SurfaceMaps::Job> SurfaceMaps::jobsFor(quint32 universe, quint32 channel) 
                 cue.name.isEmpty() ? tr("Cue %1").arg(number) : tr("Cue %1 %2").arg(number, cue.name),
                 isJob(ControlMap::CueTarget, cue.id), true, jump);
         }
-        const QString flash = tr("Flash a group");
+        const QString flash = tr("Flash a Group");
         if (groups.isEmpty())
-            add(QStringLiteral("flash"), tr("Flash a group (the show has no fixture groups)"), false, false);
+            add(QStringLiteral("flash"), tr("Flash a Group (the show has no fixture groups)"), false, false);
         for (const FixtureGroup *g : groups)
             add(QStringLiteral("flash:%1").arg(g->id()), g->name(), isJob(ControlMap::FlashGroupTarget, g->id()),
                 true, flash);
-        const QString tap = tr("Tap the tempo");
+        const QString tap = tr("Tap the Tempo");
         for (int m = 0; m < masters; ++m)
             add(QStringLiteral("tap:%1").arg(m), speed->name(m), isJob(ControlMap::TapTarget, quint32(m)), true, tap);
         add(QStringLiteral("blind"), tr("Blind"), isJob(ControlMap::BlindTarget, 0));
@@ -1775,10 +1775,10 @@ QList<SurfaceMaps::Job> SurfaceMaps::jobsFor(quint32 universe, quint32 channel) 
         const QString needs = tr("needs a Shift key");
         add(QStringLiteral("blackout"), shift ? tr("Blackout (Shift+)") : tr("Blackout (%1)").arg(needs),
             isJob(ControlMap::BlackoutTarget, 0), shift);
-        add(QStringLiteral("clear"), shift ? tr("Clear the selection (Shift+)")
-                                           : tr("Clear the selection (%1)").arg(needs),
+        add(QStringLiteral("clear"), shift ? tr("Clear the Selection (Shift+)")
+                                           : tr("Clear the Selection (%1)").arg(needs),
             isJob(ControlMap::ClearSelectionTarget, 0), shift);
-        const QString fade = shift ? tr("Fade and stop (Shift+)") : tr("Fade and stop (%1)").arg(needs);
+        const QString fade = shift ? tr("Fade and Stop (Shift+)") : tr("Fade and Stop (%1)").arg(needs);
         for (quint32 sec : { 1u, 3u, 5u, 10u, 30u })
             add(QStringLiteral("fadestop:%1").arg(sec), tr("Over %1 s").arg(sec),
                 isJob(ControlMap::FadeStopTarget, sec), shift, fade);
@@ -1795,17 +1795,17 @@ QList<SurfaceMaps::Job> SurfaceMaps::jobsFor(quint32 universe, quint32 channel) 
     else if (c.isFader())
     {
         add(QStringLiteral("gm"), tr("Grand Master"), isRole(DeskRecord::GrandMaster));
-        const QString level = tr("A group's level");
+        const QString level = tr("A Group's Level");
         if (groups.isEmpty())
-            add(QStringLiteral("level"), tr("A group's level (the show has no fixture groups)"), false, false);
+            add(QStringLiteral("level"), tr("A Group's Level (the show has no fixture groups)"), false, false);
         for (const FixtureGroup *g : groups)
             add(QStringLiteral("level:%1").arg(g->id()), g->name(), isJob(ControlMap::GroupLevelTarget, g->id()),
                 true, level);
-        const QString effects = tr("Effect speed");
+        const QString effects = tr("Effect Speed");
         for (int m = 0; m < masters; ++m)
             add(QStringLiteral("speed:%1").arg(m), speed->name(m), isJob(ControlMap::EffectSpeedTarget, quint32(m)),
                 true, effects);
-        add(QStringLiteral("size"), tr("Effect size"), isJob(ControlMap::EffectSizeTarget, 0));
+        add(QStringLiteral("size"), tr("Effect Size"), isJob(ControlMap::EffectSizeTarget, 0));
     }
     add(QStringLiteral("other"), tr("Other… (Assign to Control)"));
     // No job: what this control has of the desk, the pages or the Control Map.

@@ -456,23 +456,23 @@ a click opens its map.
 | **GO**, **Back** | GO or Back on the Run tab's list (this computer's desk). | Ready while there is a cue to play. |
 | **STOP (all off)** | The emergency stop. On a board that asks for it (the FaderPort 2), only with Shift held: **Shift+Stop**. | Lit; blinks after a stop. |
 | **Sub GO** | Sub GO on the Run tab's list: the next sub-cue of the cue playing. | Ready while the cue playing has sub-cues. |
-| **Next song**, **Previous song** | The next (or previous) song's first cue is put on standby in the Run tab's list. Nothing plays until GO. | Dark when there is no song that way. |
-| **Jump to cue ▸ N** | GO cue N of the Run tab's list. | Ready while it can play. |
-| **Flash a group ▸ N** | While held, the group's lights are at full (the dimmer, or red, green, blue and white). Let go, they are back. | Bright while held. |
-| **Tap the tempo ▸ N** | Taps speed master N: its tempo from your last taps. | Ready. |
+| **Next Song**, **Previous Song** | The next (or previous) song's first cue is put on standby in the Run tab's list. Nothing plays until GO. | Dark when there is no song that way. |
+| **Jump to Cue ▸ N** | GO cue N of the Run tab's list. | Ready while it can play. |
+| **Flash a Group ▸ N** | While held, the group's lights are at full (the dimmer, or red, green, blue and white). Let go, they are back. | Bright while held. |
+| **Tap the Tempo ▸ N** | Taps speed master N: its tempo from your last taps. | Ready. |
 | **Blind** | The toolbar's **Blind** button: a mute in Design, the Blind view in Operate. One press on, the next off. | Bright while Blind is on. |
 | **Edit Live: Store** | Edit Live's **Store**: the trims are kept in the cue's looks (one undo step). Nothing to store, it says so. | Ready while there are trims. |
 | **Blackout (Shift+)** | Blackout on, the next one off. **Hold Shift and press the key.** | Bright while blacked out. |
-| **Fade and stop (Shift+) ▸ N s** | Everything fades out over N seconds and stops, as the toolbar's **Fade and stop**. **Hold Shift and press the key.** | Ready while something runs. |
-| **Clear the selection (Shift+)** | The fixtures selected in Build are let go of. **Hold Shift and press the key.** | Ready while fixtures are selected. |
+| **Fade and Stop (Shift+) ▸ N s** | Everything fades out over N seconds and stops, as the toolbar's **Fade and stop**. **Hold Shift and press the key.** | Ready while something runs. |
+| **Clear the Selection (Shift+)** | The fixtures selected in Build are let go of. **Hold Shift and press the key.** | Ready while fixtures are selected. |
 | **Page ◀**, **Page ▶**, **Page: name** | The board's page (this computer's). | Lit while there is a page that way. |
 
 | On a fader | What it does |
 |---|---|
 | **Grand Master** | The Grand Master (this computer's desk). |
-| **A group's level ▸ N** | Group N's master: its lights scaled by the fader, as the Grand Master scales everything. Giving the job turns the group's master on. It follows the fader at once, as any master does. |
-| **Effect speed ▸ N** | Speed master N's rate: the middle is the tempo as set, the top twice it, the bottom stopped. It waits to be picked up: until the fader reaches the rate, the footer says where to move it. |
-| **Effect size** | How far every playing effect goes over what is under it: the top as made, half way half as far, the bottom none. Picked up at the top (where it starts). Not saved: it is the fader's place. |
+| **A Group's Level ▸ N** | Group N's master: its lights scaled by the fader, as the Grand Master scales everything. Giving the job turns the group's master on. It follows the fader at once, as any master does. |
+| **Effect Speed ▸ N** | Speed master N's rate: the middle is the tempo as set, the top twice it, the bottom stopped. It waits to be picked up: until the fader reaches the rate, the footer says where to move it. |
+| **Effect Size** | How far every playing effect goes over what is under it: the top as made, half way half as far, the bottom none. Picked up at the top (where it starts). Not saved: it is the fader's place. |
 
 A knob or encoder turns what the page says.
 
@@ -1267,15 +1267,15 @@ songs as the Run tab's list, in Design, the APC40 mkII plugged in.
    (bottom right, beside **Bank**) and press the pad. *Expect:* the stage
    goes black, the toolbar's Blackout is on and the pad is bright. Shift +
    pad again. *Expect:* the stage comes back.
-2. **Flash a group.** Click **Clip 1-2** ▸ **Flash a group ▸** your group.
+2. **Flash a group.** Click **Clip 1-2** ▸ **Flash a Group ▸** your group.
    Hold the pad. *Expect:* that group at full while held, the pad bright;
    let go, the stage as it was.
-3. **Next song.** Click **Clip 1-3** ▸ **Next song**. Press it. *Expect:*
+3. **Next song.** Click **Clip 1-3** ▸ **Next Song**. Press it. *Expect:*
    nothing plays; the Run tab's standby (and the footer's *Next:*) is the
    next song's first cue. Press **PLAY** (GO). *Expect:* that cue plays.
    On the last song the pad is dark.
 4. **A group's level** (optional). Switch to Operate. Click **Fader 2** ▸
-   **A group's level ▸** your group and move the fader. *Expect:* that
+   **A Group's Level ▸** your group and move the fader. *Expect:* that
    group's lights follow it, nothing else.
 
 **Plugged in, set up by itself (053 boards)**

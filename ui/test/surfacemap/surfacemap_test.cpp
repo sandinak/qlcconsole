@@ -1108,7 +1108,7 @@ void SurfaceMap_Test::theBoardJobsAreInThePicker()
                               QStringLiteral("flash:%1").arg(show.front->id()),
                               QStringLiteral("cue:%1").arg(show.cues.at(2)) })
         QVERIFY2(!job(kClip11, k).key.isEmpty(), qPrintable(k));
-    QCOMPARE(job(kClip11, QStringLiteral("flash:%1").arg(show.front->id())).group, QStringLiteral("Flash a group"));
+    QCOMPARE(job(kClip11, QStringLiteral("flash:%1").arg(show.front->id())).group, QStringLiteral("Flash a Group"));
     QCOMPARE(job(kClip11, QStringLiteral("flash:%1").arg(show.front->id())).text, QStringLiteral("Front"));
     QVERIFY2(job(kClip11, QStringLiteral("cue:%1").arg(show.cues.at(2))).text.startsWith(QStringLiteral("Cue 1.0.1")),
              qPrintable(job(kClip11, QStringLiteral("cue:%1").arg(show.cues.at(2))).text));
@@ -1130,7 +1130,7 @@ void SurfaceMap_Test::theBoardJobsAreInThePicker()
     QStringList texts;
     for (QAction *a : menu->actions())
         texts << a->text();
-    QVERIFY2(texts.contains(QStringLiteral("Flash a group: Front")), qPrintable(texts.join('|')));
+    QVERIFY2(texts.contains(QStringLiteral("Flash a Group: Front")), qPrintable(texts.join('|')));
     QVERIFY(texts.contains(QStringLiteral("Sub GO")));
     QVERIFY(texts.contains(QStringLiteral("Blackout (Shift+)")));
 
@@ -1480,7 +1480,7 @@ void SurfaceMap_Test::jobPickerShots()
         settle();
         QVERIFY(menu->grab().save(QStringLiteral("%1/%2-jobs-picker-key-%3.png").arg(dir, prefix, tag)));
         for (QAction *a : menu->actions())
-            if (a->menu() != nullptr && a->text().startsWith(QStringLiteral("Flash a group")))
+            if (a->menu() != nullptr && a->text().startsWith(QStringLiteral("Flash a Group")))
             {
                 a->menu()->popup(scroll.mapToGlobal(QPoint(300, 80)));
                 settle();
