@@ -396,7 +396,8 @@ void PlotSheet_Test::theDrawingIsOnWhiteByDefault()
 
 void PlotSheet_Test::paperKeepsColoursAndTurnsGreysOver()
 {
-    QImage img(6, 1, QImage::Format_ARGB32_Premultiplied);
+    QImage img(7, 1, QImage::Format_ARGB32_Premultiplied);
+    img.setPixel(6, 0, qRgb(90, 90, 90));       // a cyc's mid-grey fill
     img.setPixel(0, 0, qRgb(0, 0, 0));          // the screen's background
     img.setPixel(1, 0, qRgb(255, 255, 255));    // a white label
     img.setPixel(2, 0, qRgb(40, 40, 40));       // a grid line
@@ -415,6 +416,7 @@ void PlotSheet_Test::paperKeepsColoursAndTurnsGreysOver()
         QVERIFY2(qAbs(QColor(img.pixel(x, 0)).hslHue() - before.hslHue()) <= 2, qPrintable(QString::number(x)));
     }
     QVERIFY(QColor(img.pixel(5, 0)).lightness() > 150);   // a dark tint goes pale on paper
+    QVERIFY2(QColor(img.pixel(6, 0)).lightness() >= 150, "a mid-grey fill must not become a slab of ink");
 }
 
 void PlotSheet_Test::theKeyCountsWhatIsDrawn()

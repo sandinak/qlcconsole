@@ -365,10 +365,11 @@ void PlotSheet::toPaper(QImage &image)
             // channel moves by the same amount.
             const int d = 255 - mx - mn;
             r += d; g += d; b += d;
-            if (mx - mn < 24)
+            if (mx - mn < 24 && r > 190 && r < 250)
             {
-                // A grey: darker on paper, so a faint screen grid line
-                // (light once turned over) is a visible line again.
+                // A faint grey line once turned over (a screen grid line on
+                // the dark): darker, so it reads on white. Mid greys, a cyc
+                // or a riser's fill, stay as turned over: no slabs of ink.
                 r = 255 - qMin(255, (255 - r) * 5 / 2);
                 g = 255 - qMin(255, (255 - g) * 5 / 2);
                 b = 255 - qMin(255, (255 - b) * 5 / 2);
