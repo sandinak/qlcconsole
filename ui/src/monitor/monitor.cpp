@@ -117,6 +117,7 @@
 #include "networktopologydialog.h"
 #include "networkreportdialog.h"
 #include "patchlistdialog.h"
+#include "plotprintdialog.h"
 #include "fixturecreator.h"
 #include "monitorinventorypanel.h"
 #include "qlcfixturedef.h"
@@ -2906,11 +2907,19 @@ void Monitor::initGraphicsToolbar()
     moreMenu->addAction(QIcon(":/color.png"), tr("Set Background Colour"),
                         this, SLOT(slotSetBackgroundColor()));
     moreMenu->addAction(tr("Network Topology…"), this, [this]() { slotEditNetworkNode(0); });
-    moreMenu->addAction(tr("Network Report…"), this, &Monitor::slotNetworkReport);
-    moreMenu->addAction(tr("Patch List…"), this, [this]() {
+    /* The paperwork the plot makes, in one place (UX-44: the plot drawing
+       joined the two reports as one submenu, so the More menu got shorter). */
+    QMenu *printMenu = moreMenu->addMenu(tr("Print && Reports"));
+    printMenu->setObjectName(QStringLiteral("plotPrintMenu"));
+    QAction *plotAct = printMenu->addAction(tr("Print Plot / Save PDF…"), this, &Monitor::slotPlotPdf);
+    plotAct->setObjectName(QStringLiteral("plotPdfAction"));
+    plotAct->setToolTip(tr("Print the plot, or save it as a PDF, with a title block, a key of the "
+                           "fixtures with counts, and a scale bar"));
+    printMenu->addAction(tr("Patch List…"), this, [this]() {
         PatchListDialog dlg(m_doc, this);
         dlg.exec();
     });
+    printMenu->addAction(tr("Network Report…"), this, &Monitor::slotNetworkReport);
 
     moreBtn->setMenu(moreMenu);
     m_graphicsToolBar->addWidget(moreBtn);
@@ -8036,6 +8045,20 @@ void Monitor::slotEditNetworkNode(quint32 nodeIndex)
 void Monitor::slotNetworkReport()
 {
     NetworkReportDialog dlg(m_doc, this);
+    dlg.exec();
+}
+
+void Monitor::slotPlotPdf()
+{
+    PlotSheet::Context ctx;
+    ctx.view = m_graphicsView;
+    ctx.ownerColours = m_mapView == ViewOwner;
+    if (m_overviewView != NULL)
+    {
+        ctx.camera = m_overviewView->camera();
+        ctx.haveCamera = true;
+    }
+    PlotPrintDialog dlg(m_doc, ctx, this);
     dlg.exec();
 }
 

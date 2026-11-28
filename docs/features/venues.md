@@ -484,7 +484,7 @@ touch your show's own lights or the looks you programmed.
 - The **Inventory** panel shows **[House]** or **[Rental]** beside a
   fixture that is not Tour.
 - The **patch list** (**Fixtures ▸ Patch List…**, or the Lighting
-  Studio's **More ▸ Patch List…**) has an **Owner** column once any
+  Studio's **More ▸ Print & Reports ▸ Patch List…**) has an **Owner** column once any
   fixture is not Tour, and its **Owner** filter shows only the Tour,
   House or Rental fixtures; the copy, CSV, XLSX, PDF and labels follow
   it.

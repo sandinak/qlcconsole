@@ -692,6 +692,7 @@ void Units_Test::dialogsFollowThePreference()
         { QStringLiteral("Network Topology"), true, {}, [doc]() -> QWidget * {
               return new NetworkTopologyDialog(doc, 0); } },
         { QStringLiteral("Network Report"), false, {}, [doc]() -> QWidget * { return new NetworkReportDialog(doc); } },
+        { QStringLiteral("Print Plot"), false, [mon](QWidget *) { mon->slotPlotPdf(); }, {} },
         { QStringLiteral("Fill with People"), true, {}, [props, &rig]() -> QWidget * {
               return new PerformersDialog(props, { rig.platformId }); } },
         { QStringLiteral("Add RGB Panel"), true, {}, [doc]() -> QWidget * { return new AddRGBPanel(nullptr, doc); } },

@@ -236,6 +236,16 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   beam and distance and stopped by walls and drapes, with the dark spots
   (under 10 fc unless you change it) outlined; Show Review's new PWR-14 warns
   of a cue that leaves an acting area dark.
+- **Print the plot**: the Lighting Studio's **More ▸ Print & Reports ▸ Print
+  Plot / Save PDF…** makes a drawing of the plan, the front or side
+  elevation or the Rig Overview's angled look, on Letter, Legal, Tabloid, A4
+  or A3: a title block (show, venue, drawn by, date, revision, view), a
+  symbol key with each kind of fixture's symbol and count, a layer and owner
+  key, and a scale bar in Settings ▸ Units. The drawing is on white for
+  paper (dark lines and labels, colours kept), or as on screen. Save it as
+  a PDF or print it;
+  Patch List… and Network Report… moved into the same submenu. See
+  [Printing the plot](docs/features/plot-drawing.md).
 
 ### Changed
 

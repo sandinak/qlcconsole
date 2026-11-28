@@ -91,6 +91,10 @@ Units** when a square is one of it (**ft**), or says what a square is in it
 when the grid is in another unit (**1 = 3' 3 3/8"** for a metre grid read
 in feet).
 
+To put the plot on paper, with a title block, a symbol key with counts
+and a scale bar, use **More ▸ Print & Reports ▸ Print Plot / Save PDF…**:
+see [Printing the plot](plot-drawing.md).
+
 ### Stage marks: centre line, curtain line, number line
 
 ![The plot with the stage pieces on: the centre mark and dashed centre line, the curtain line selected, the apron as its own rounded deck in front of it with its depth dimensioned, the FOH truss labelled with its distance downstage of the curtain line, and the number line along the front of the apron](../images/lighting-studio-stage-marks.png)
@@ -2844,7 +2848,7 @@ where the cable actually goes:
 - **Cable runs** are drawn from each port through its fixtures in address
   order, as lines that show their stats when you hover; DMX fixtures no
   port serves are flagged.
-- **More → Network Report…** lists nodes, ports used and free, universes
+- **More → Print & Reports → Network Report…** lists nodes, ports used and free, universes
   carried, the longest run, per-port fixtures/channels/run length, network
   fixtures by IP, unserved fixtures, and warnings — with **Copy** and
   **Save CSV**.

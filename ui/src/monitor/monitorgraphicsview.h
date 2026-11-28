@@ -168,6 +168,17 @@ public:
     /** Get the grid size in monitor units */
     QSize gridSize() const { return m_gridSize; }
 
+    /** The stage grid as laid out for the current point of view, in scene
+     *  coordinates (unrotated). The printed plot frames this. */
+    QRectF gridSceneRect() const
+    { return QRectF(m_xOffset, m_yOffset, m_gridExtent.width() * m_cellPixels,
+                    m_gridExtent.height() * m_cellPixels); }
+    /** Scene units per millimetre of stage, for the printed scale bar. */
+    double sceneUnitsPerMm() const
+    { return m_unitValue > 0 ? double(m_cellPixels) / double(m_unitValue) : 0.0; }
+    /** Every fixture on the plot, by fixture id. */
+    const QHash<quint32, MonitorFixtureItem *> &fixtureItems() const { return m_fixtures; }
+
     /** Set the number of sub-divisions drawn inside each grid cell */
     void setGridSubdivisions(int subdivisions);
 

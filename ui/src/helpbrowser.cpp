@@ -49,7 +49,7 @@ namespace
 /* The guides, in the order to read them. */
 const char *const kTopics[] = {
     "getting-started.md", "whats-new.md", "coming-from-qlc4.md", "README.md", "lighting-studio.md",
-    "build.md", "show-tree.md", "fixture-manager.md", "definition-updates.md",
+    "plot-drawing.md", "build.md", "show-tree.md", "fixture-manager.md", "definition-updates.md",
     "stage-targets.md", "focus-calls.md", "gamepad-remote.md", "venues.md", "refine.md", "shows.md", "teaching.md",
     "show-review.md", "dress-rehearsal.md", "ai-assist.md", "show-control.md", "control-surfaces.md",
     "edit-live.md",

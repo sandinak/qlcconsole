@@ -400,7 +400,7 @@ shows the range under the IP field — "One each: 172.18.2.60 to
 
 The paperwork for the crew who hang, name and address the rig. Open it from
 the menu bar's **Fixtures → Patch List…**, or the Lighting Studio's
-**More → Patch List…**.
+**More → Print & Reports → Patch List…**.
 
 ![The patch list grouped by location, with the Group by, Show and Owner controls and the export and label buttons](../images/patch-list.png)
 
