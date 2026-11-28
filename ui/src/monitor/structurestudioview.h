@@ -35,6 +35,8 @@
 #include <cstring>
 #include <QImage>
 #include <functional>
+#include <memory>
+#include <atomic>
 #include <QVector2D>
 #include <QVector3D>
 #include <QColor>
@@ -57,6 +59,7 @@
 #include "fixture.h"   // Fixture::invalidId() -- the "no fixture" marker
 #include "truss.h"     // FixtureRigProps::Face
 #include "beamocclusion.h"
+#include "lightmap.h"
 
 class Doc;
 
@@ -252,6 +255,35 @@ public:
     bool headsTravelling() const { return m_followersMoving; }
     static bool lineOfSightBeams();
 
+    /** The light map (Capture-study gap 3): how much light reaches a person
+     *  standing on the stage, at the show's subject height
+     *  (MonitorProperties::lightMapHeight(), 5' 6"), drawn as a heat map over
+     *  the stage in the Top and Angled views, with the dark spots (under
+     *  lightMapDarkLux(), 10 fc) outlined. Read from the output (every lit
+     *  fixture's lumens over its cone, LightMap), worked out off the GUI
+     *  thread and again only when the lights or the stage change; nothing is
+     *  done while it is off. Rig Overview footer: Light Map. */
+    void setLightMap(bool on);
+    bool lightMap() const { return m_lightMapOn; }
+    /** The subject height or the dark level changed: work it out again. */
+    void lightMapSettingsChanged();
+    /** The last map worked out (invalid until the first is done). */
+    const LightMap::Grid &lightMapGrid() const { return m_lightGrid; }
+    /** Dark spots in it (LightMap::darkSpots()). */
+    int lightMapDarkSpots() const { return m_lightSpots; }
+    /** What the map's legend says now ("Light at 5' 6" · dark under 10 fc ·
+     *  2 dark spots"; "Light map: Top or Angled view"). */
+    QString lightMapCaption() const;
+    /** Wait up to @p ms for the map to be up to date (tests). */
+    bool waitForLightMap(int ms = 5000);
+    /** What it cost: the last map's computation on its worker (ms), and the
+     *  last frame's drawing of it on the GUI thread (ms). */
+    double lightMapComputeMs() const { return m_lightComputeMs; }
+    double lightMapPaintMs() const { return m_lightPaintMs; }
+    /** The lights the map reads now: every lit fixture shown, from the
+     *  output. GUI thread. */
+    QVector<LightMap::Source> lightSources() const;
+
     /** How a prop -- a deck, a riser, a piece of scenery -- is painted in the
      *  rig views: in its own colour (a platform's finish(), stage black by
      *  default; scenery's colour, else its kind's), never a plot or warning
@@ -381,6 +413,8 @@ signals:
     /** Structure geometry changed on the canvas (e.g. a boom resized) — the host
      *  should refresh the 2D map. */
     void structureChanged();
+    /** A new light map is up (lightMapGrid()). */
+    void lightMapUpdated();
 
     /** A bar hung on this truss was double-clicked -- its own editor (Along
      *  truss / Face / Lock) lives elsewhere, this just says which bar. */
@@ -1234,6 +1268,26 @@ private:
      *  with one distance, not the cone. Filled as it is asked for. */
     struct BeamBound { QVector3D centre; float reach2; float r, g, b; float factor; };
     mutable QVector<BeamBound> m_beamBounds;
+
+    /* The light map (structurestudioview_lightmap.cpp). */
+    void requestLightMap();
+    void startLightMap();
+    void lightMapDone(const LightMap::Grid &grid, quint64 key, double ms);
+    void drawLightMap(QPainter &p) const;
+    bool m_lightMapOn = false;
+    bool m_lightBusy = false;           ///< a map is being worked out
+    bool m_lightPending = false;        ///< ...and the lights changed since it started
+    quint64 m_lightKey = 0;             ///< what the map in hand was worked out from
+    quint64 m_lightBusyKey = 0;
+    LightMap::Grid m_lightGrid;
+    QImage m_lightImage;                ///< one pixel a grid point
+    QPainterPath m_lightDark;           ///< the dark spots' outlines, in grid cells
+    int m_lightSpots = 0;
+    double m_lightComputeMs = 0.0;
+    mutable double m_lightPaintMs = 0.0;
+    QElapsedTimer m_lightStarted;
+    class QTimer *m_lightThrottle = nullptr;
+    std::shared_ptr<std::atomic<bool>> m_lightCancel;
 
     /** What one drawing thread gathers while fixtures are drawn across the
      *  cores (drawFixturesInParallel()): its own ops and beams, in its

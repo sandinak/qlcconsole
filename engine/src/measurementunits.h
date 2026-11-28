@@ -114,6 +114,20 @@ public:
      *  "1.8 m/s", "6'", "180 cm") or a bare number in @a unit's speed. */
     static double parseSpeed(const QString &text, LengthUnit unit, bool *ok);
 
+    /** Light on a surface (the Rig Overview's light map, Show Review's dark
+     *  acting areas) in the unit that goes with a show's lengths: foot-candles
+     *  with feet or inches, lux with the metric lengths. 1 fc = 10.764 lx. */
+    static bool illuminanceInFootCandles(LengthUnit unit);
+    /** "fc", "lx" */
+    static QString illuminanceSymbol(LengthUnit unit);
+    /** How many lux one of @a unit's illuminance unit is: 10.764 or 1 */
+    static double luxPer(LengthUnit unit);
+    /** @a lux shown in @a unit's illuminance: 12.5 fc (to 0.1 under 100,
+     *  whole above), 135 lx (whole) */
+    static QString formatIlluminance(double lux, LengthUnit unit);
+    /** ...in preferredLength()'s */
+    static QString formatIlluminance(double lux);
+
     /** @a kg shown in @a unit: kg to 0.001, lb to 0.01, no trailing zeros */
     static QString formatWeight(double kg, WeightUnit unit);
 

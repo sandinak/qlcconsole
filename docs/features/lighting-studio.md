@@ -2014,6 +2014,39 @@ fix one — save it and the show picks up the new figure without reopening.
   pool, and on people. A declared lens of 170° or more is treated as a 150°
   flood.
 
+### Light map: the light on a person
+
+**Light Map** in the Rig Overview's footer, beside Beams, shows how much
+light reaches a person standing on the stage: a heat map over the stage in
+the **Top** and **Angled** views, dark blue where it is dark, then green,
+yellow and white as the light climbs. The **dark spots** are outlined in
+dashed amber, and the legend at the bottom left says the height it is
+measured at, what counts as dark and how many dark spots there are ("Light
+at 5' 6" · dark under 10 fc · 2 dark spots"). The front and side elevations
+can't show a plane seen edge-on: the legend says to switch to Top or Angled.
+
+- **What it reads** — the output, as the rig is now: every lit fixture's
+  light (its declared lumens, or watts at 35 lm/W, as
+  [How bright each fixture is](#how-bright-each-fixture-is) says) spread
+  over its beam (its zoom where it has one), at its dimmer level, falling
+  off with the square of the distance, and half as bright at the beam angle
+  as in the middle. Lasers, star projectors and lanterns are left out.
+- **What is in the way** — anything the stage counts as solid
+  ([Line of sight](#line-of-sight)): a wall, a closed drape, a riser's side.
+  The area behind it is dark.
+- **Subject height** and **Dark under** — the arrow beside Light Map. The
+  height is above the deck under each point, so a person on a riser is
+  measured higher; 5' 6" unless you change it. Below **Dark under** (10 fc,
+  108 lx, unless you change it) a place is dark. Both are in Settings ▸
+  Units' units (feet and foot-candles, or metres and lux) and are saved
+  with the show; Show Review's **PWR-14** uses the same two numbers.
+- **Cost** — off, it costs nothing. On, it is worked out away from the
+  drawing, only when the lights or the stage change, at most five times a
+  second; the picture itself is one image over the rig.
+
+It is an estimate for finding the dark spots, not a light-meter reading: no
+light bounces, a gobo is not taken off, and a bar of pixels is one light.
+
 ### Light from inside steps and platforms
 
 A fixture placed **Inside** a Clear- or Open-topped platform or step lights

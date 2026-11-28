@@ -67,6 +67,7 @@
 #include "panturn.h"
 #include "righeads.h"
 #include "scenery.h"
+#include "lightmap.h"
 #include "placementcheck.h"
 #include "stageplatform.h"
 #include "truss.h"
@@ -3309,6 +3310,81 @@ void ShowReview_Test::pwr12Backwash()
         cueLit(m_doc, c, front, 0);
     }
     QVERIFY(quiet("PWR-12"));
+}
+
+/* PWR-14: an acting area (a stage target of kind Area) that a cue leaves
+   dark at subject height. A front light 6 m up, 12 m downstage, tipped 35
+   degrees down, lights "DS centre" (about 15 fc there) and not the bench
+   upstage right; a wall in its way darkens DS centre too; a blackout is never
+   named. */
+void ShowReview_Test::pwr14DarkActingArea()
+{
+    MonitorProperties *mp = m_doc->monitorProperties();
+    mp->setGridSize(QVector3D(10, 3, 14));
+    Fixture *front = par("Front 1", 0);
+    aimFront(mp, front, 5.0f, 35.0f);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 lid = st->addCueList(st->addProduction("Show"), "Act 1");
+    const quint32 c1 = st->addCue(lid, -1, "One");
+    const quint32 c2 = st->addCue(lid, 0, "Two");
+    cueLit(m_doc, c1, front, 255);
+    cueLit(m_doc, c2, front, 255);
+    // No acting areas: quiet.
+    QVERIFY(quiet("PWR-14"));
+
+    auto area = [mp](const QString &name, float x, float y, const QSizeF &size) {
+        StageTarget *t = mp->addStageTarget();
+        t->setName(name);
+        t->setKind(StageTarget::Kind::Area);
+        t->setPosition(QVector3D(x, y, 0.0f));
+        t->setFootprint(size);
+        return t;
+    };
+    StageTarget *ds = area(QStringLiteral("DS centre"), 5.0f, 5.8f, QSizeF(2.0, 2.0));
+    QVERIFY2(quiet("PWR-14"), qPrintable(findingText(findings("PWR-14"))));
+
+    StageTarget *bench = area(QStringLiteral("Bench"), 1.0f, 1.5f, QSizeF(1.5, 1.0));
+    QVERIFY(fires("PWR-14"));
+    QList<ReviewFinding> f = findings("PWR-14");
+    QCOMPARE(f.count(), 1);                       // dark in cues one and two: named in one
+    QCOMPARE(f.first().severity, ReviewFinding::Warning);
+    QVERIFY2(f.first().message.contains("Bench") && f.first().message.contains("One")
+             && f.first().message.contains("1 more cue"), qPrintable(f.first().message));
+    QVERIFY(f.first().targets.contains(QStringLiteral("target:%1").arg(bench->id())));
+    QVERIFY(f.first().targets.contains(QStringLiteral("list:%1/cue:%2").arg(lid).arg(c1)));
+    QCOMPARE(f.first().jump, QStringLiteral("cue"));
+    // The level the show calls dark is in the message, in its units.
+    QVERIFY(f.first().message.contains(MeasurementUnits::formatIlluminance(mp->lightMapDarkLux())));
+
+    // Dark under far more than the light gives: DS centre is dark too.
+    mp->setLightMapDarkLux(5000.0f);
+    QCOMPARE(findings("PWR-14").count(), 2);
+    mp->setLightMapDarkLux(float(LightMap::defaultDarkLux()));
+
+    // A wall between the light and DS centre: dark there as well.
+    Scenery *wall = mp->addScenery();
+    wall->setKind(Scenery::Wall);
+    wall->setName("Wall");
+    wall->setOriginX(5.0f);
+    wall->setOriginY(8.0f);
+    wall->setWidth(10.0f);
+    wall->setHeight(5.0f);
+    wall->setThickness(0.3f);
+    f = findings("PWR-14");
+    QCOMPARE(f.count(), 2);
+    bool dsDark = false;
+    for (const ReviewFinding &x : f)
+        dsDark = dsDark || x.targets.contains(QStringLiteral("target:%1").arg(ds->id()));
+    QVERIFY2(dsDark, "a wall in the way left DS centre lit");
+    mp->removeScenery(wall->id());
+    QCOMPARE(findings("PWR-14").count(), 1);
+
+    // A blackout is dark on purpose: nothing lit in either cue, nothing named.
+    st->removeLayer(c1, st->cueList(lid)->cue(c1)->layers.last().id);
+    st->removeLayer(c2, st->cueList(lid)->cue(c2)->layers.last().id);
+    cueLit(m_doc, c1, front, 0);
+    cueLit(m_doc, c2, front, 0);
+    QVERIFY(quiet("PWR-14"));
 }
 
 void ShowReview_Test::pwr12Meant()

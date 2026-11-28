@@ -47,6 +47,7 @@
 #include "qlcconfig.h"
 #include "qlcfile.h"
 #include "gobolibrary.h"
+#include "lightmap.h"
 #include "doc.h"
 
 #define KXMLQLCMonitorDisplay       QStringLiteral("DisplayMode")
@@ -68,6 +69,8 @@
 #define KXMLQLCMonitorAimSubjectHeight QStringLiteral("AimSubjectHeight")
 #define KXMLQLCMonitorOcclusionKinds   QStringLiteral("OcclusionKinds")
 #define KXMLQLCMonitorOcclusionMinSize QStringLiteral("OcclusionMinSize")
+#define KXMLQLCMonitorLightMapHeight   QStringLiteral("LightMapHeight")
+#define KXMLQLCMonitorLightMapDarkLux  QStringLiteral("LightMapDarkLux")
 #define KXMLQLCMonitorOriginX       QStringLiteral("OriginX")
 #define KXMLQLCMonitorOriginY       QStringLiteral("OriginY")
 #define KXMLQLCMonitorItemID        QStringLiteral("ID")
@@ -1147,6 +1150,8 @@ void MonitorProperties::reset()
     m_aimSubjectHeight = 1.4f;
     m_occlusionKinds = BeamOcclusion::defaultKinds();
     m_occlusionMinSize = BeamOcclusion::defaultMinSize();
+    m_lightMapHeight = float(LightMap::defaultHeight());
+    m_lightMapDarkLux = float(LightMap::defaultDarkLux());
     m_occlusion.clear();
     m_stageOrigin = QPointF(0, 0);
     m_stageMarks = NoStageMarks;
@@ -3729,6 +3734,10 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
         setOcclusionKinds(attrs.value(KXMLQLCMonitorOcclusionKinds).toString().toInt());
     if (attrs.hasAttribute(KXMLQLCMonitorOcclusionMinSize))
         setOcclusionMinSize(attrs.value(KXMLQLCMonitorOcclusionMinSize).toString().toFloat());
+    if (attrs.hasAttribute(KXMLQLCMonitorLightMapHeight))
+        setLightMapHeight(attrs.value(KXMLQLCMonitorLightMapHeight).toString().toFloat());
+    if (attrs.hasAttribute(KXMLQLCMonitorLightMapDarkLux))
+        setLightMapDarkLux(attrs.value(KXMLQLCMonitorLightMapDarkLux).toString().toFloat());
 
     if (attrs.hasAttribute(KXMLQLCMonitorOriginX) || attrs.hasAttribute(KXMLQLCMonitorOriginY))
         setStageOrigin(QPointF(attrs.value(KXMLQLCMonitorOriginX).toString().toDouble(),
@@ -4780,6 +4789,10 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument, 
         doc->writeAttribute(KXMLQLCMonitorOcclusionKinds, QString::number(occlusionKinds()));
     if (!qFuzzyCompare(occlusionMinSize(), BeamOcclusion::defaultMinSize()))
         doc->writeAttribute(KXMLQLCMonitorOcclusionMinSize, QString::number(double(occlusionMinSize())));
+    if (qAbs(double(lightMapHeight()) - LightMap::defaultHeight()) > 1e-4)
+        doc->writeAttribute(KXMLQLCMonitorLightMapHeight, QString::number(double(lightMapHeight())));
+    if (qAbs(double(lightMapDarkLux()) - LightMap::defaultDarkLux()) > 1e-3)
+        doc->writeAttribute(KXMLQLCMonitorLightMapDarkLux, QString::number(double(lightMapDarkLux())));
     if (!stageOrigin().isNull())
     {
         doc->writeAttribute(KXMLQLCMonitorOriginX, QString::number(stageOrigin().x()));

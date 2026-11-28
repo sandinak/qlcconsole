@@ -145,6 +145,9 @@
 #include "sceneryitem.h"
 #include "monitorimageitem.h"
 #include "feetinchesspinbox.h"
+#include "measurementunits.h"
+#include "lengthspinbox.h"
+#include "lightmap.h"
 #include "lengthinputdialog.h"
 #include "rigeditsession.h"
 #include "nolightzone.h"
@@ -3890,6 +3893,84 @@ void Monitor::showStageOverview()
     connect(beamBtn, &QToolButton::toggled, view,
             [view](bool on) { view->setBeams(on); });
     beamBtn->setChecked(true);
+
+    /* The light map (Capture-study gap 3): how much light reaches a person
+       standing on the stage, as a heat map, the dark spots outlined. Off by
+       default -- it is a question you ask of a look, not part of the
+       picture -- and nothing is worked out while it is off. The arrow holds
+       the two numbers it reads, saved with the show: how high a face is,
+       and below what it is dark. */
+    QToolButton *lightMapBtn = new QToolButton(footer);
+    lightMapBtn->setObjectName(QStringLiteral("rigLightMap"));
+    lightMapBtn->setText(tr("Light Map"));
+    lightMapBtn->setCheckable(true);
+    lightMapBtn->setStyleSheet(toggleStyle);
+    lightMapBtn->setPopupMode(QToolButton::MenuButtonPopup);
+    lightMapBtn->setToolTip(tr("How much light reaches a person standing on the stage, as a heat map "
+                               "in the Top and Angled views, with the dark spots outlined; the arrow "
+                               "sets the subject height and what counts as dark"));
+    {
+        MonitorProperties *mp = m_doc->monitorProperties();
+        QWidget *lw = new QWidget(footer);
+        QFormLayout *lfl = new QFormLayout(lw);
+        lfl->setContentsMargins(10, 8, 10, 8);
+        LengthSpinBox *heightSpin = new LengthSpinBox(1000.0, lw);
+        heightSpin->setObjectName(QStringLiteral("rigLightMapHeight"));
+        heightSpin->setRange(0.3, 3.0);
+        heightSpin->setSingleStep(MeasurementUnits::isImperial(MeasurementUnits::preferredLength())
+                                  ? 0.0254 : 0.05);
+        heightSpin->setDecimals(4);
+        heightSpin->setValue(double(mp->lightMapHeight()));
+        heightSpin->setToolTip(tr("How high the light is measured above the deck: a face, %1 "
+                                  "unless you change it. ")
+                                   .arg(MeasurementUnits::formatMetres(LightMap::defaultHeight()))
+                               + heightSpin->toolTip());
+        lfl->addRow(tr("Subject height:"), heightSpin);
+        const MeasurementUnits::LengthUnit unit = MeasurementUnits::preferredLength();
+        QDoubleSpinBox *darkSpin = new QDoubleSpinBox(lw);
+        darkSpin->setObjectName(QStringLiteral("rigLightMapDark"));
+        darkSpin->setDecimals(MeasurementUnits::illuminanceInFootCandles(unit) ? 1 : 0);
+        darkSpin->setRange(MeasurementUnits::illuminanceInFootCandles(unit) ? 0.1 : 1.0,
+                           MeasurementUnits::illuminanceInFootCandles(unit) ? 500.0 : 5000.0);
+        darkSpin->setSingleStep(MeasurementUnits::illuminanceInFootCandles(unit) ? 1.0 : 10.0);
+        darkSpin->setSuffix(QStringLiteral(" ") + MeasurementUnits::illuminanceSymbol(unit));
+        darkSpin->setValue(double(mp->lightMapDarkLux()) / MeasurementUnits::luxPer(unit));
+        darkSpin->setToolTip(tr("Less light than this on a face reads as dark: outlined on the map, "
+                                "and a Show Review warning (PWR-14) for an acting area a cue leaves "
+                                "this dark"));
+        lfl->addRow(tr("Dark under:"), darkSpin);
+        // Another show opened: its own numbers.
+        connect(m_doc, &Doc::loaded, heightSpin, [mp, heightSpin, darkSpin, unit]() {
+            const QSignalBlocker hb(heightSpin), db(darkSpin);
+            heightSpin->setValue(double(mp->lightMapHeight()));
+            darkSpin->setValue(double(mp->lightMapDarkLux()) / MeasurementUnits::luxPer(unit));
+        });
+        QMenu *lm = new QMenu(lightMapBtn);
+        QWidgetAction *wa = new QWidgetAction(lm);
+        wa->setDefaultWidget(lw);
+        lm->addAction(wa);
+        lightMapBtn->setMenu(lm);
+        connect(heightSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), view,
+                [this, mp, view](double metres) {
+            if (qAbs(double(mp->lightMapHeight()) - metres) < 1e-5)
+                return;
+            mp->setLightMapHeight(float(metres));
+            m_doc->setModified();
+            view->lightMapSettingsChanged();
+        });
+        connect(darkSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), view,
+                [this, mp, view, unit](double v) {
+            const double lux = v * MeasurementUnits::luxPer(unit);
+            if (qAbs(double(mp->lightMapDarkLux()) - lux) < 1e-3)
+                return;
+            mp->setLightMapDarkLux(float(lux));
+            m_doc->setModified();
+            view->lightMapSettingsChanged();
+        });
+    }
+    bar->addWidget(lightMapBtn);
+    connect(lightMapBtn, &QToolButton::toggled, view,
+            [view](bool on) { view->setLightMap(on); });
 
     /* Realistic move speed (0.5): a head travels at the speed its type can
        when the output jumps it, instead of snapping. Shared by every rig

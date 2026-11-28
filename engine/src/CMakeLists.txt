@@ -111,6 +111,7 @@ add_library(${module_name} SHARED
     freerotation.cpp freerotation.h
     beamlanding.cpp beamlanding.h
     beamocclusion.cpp beamocclusion.h
+    lightmap.cpp lightmap.h
     stageplatform.cpp stageplatform.h
     nolightzone.cpp nolightzone.h
     pipe.cpp pipe.h
