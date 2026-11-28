@@ -46,7 +46,9 @@ in **Plot layers** to print it.
 - **View**: **Plan (top)**, **Front elevation**, **Side elevation**, or
   **Rig Overview (angled)**. The angled look is a picture of the Rig
   Overview from where its camera is (open the Rig Overview first and turn
-  it to the angle you want); it is not to scale, so it has no scale bar.
+  it to the angle you want), in full working light; on white paper only
+  the room behind the rig turns white. It is not to scale, so it has no
+  scale bar.
 - **Paper**: Letter, Legal, Tabloid, A4 or A3. Letter is the first choice
   when Settings ▸ Units is in feet or inches, A4 when it is metric.
 - **Background**: **White (for print)**, the first choice, saves ink and

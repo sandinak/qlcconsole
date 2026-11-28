@@ -536,6 +536,11 @@ void PlotSheet_Test::frontAndOverviewPrintAndTheStudioIsUnchanged()
     const QStringList texts = sheetTexts(angled);
     QVERIFY2(texts.contains(QStringLiteral("Angled view: not to scale")), qPrintable(texts.join(" | ")));
     QCOMPARE(angled.fixtureCount(), front.fixtureCount());
+    // On paper the room behind the rig is white too.
+    const QImage angledImg = angled.preview(1400);
+    const QPointF inPicture = angled.drawingRect().topLeft() + QPointF(24, 24);
+    QVERIFY2(lightnessAt(angledImg, angled, inPicture, 4) > 230,
+             qPrintable(QString::number(lightnessAt(angledImg, angled, inPicture, 4))));
     const QString angledPdf = dir.filePath(QStringLiteral("angled.pdf"));
     QVERIFY2(angled.writePdf(angledPdf, &error), qPrintable(error));
     QVERIFY(QFileInfo(angledPdf).size() > 10000);

@@ -404,9 +404,26 @@ QImage PlotSheet::overviewImage(const QSize &size) const
     {
         view.setPlane(StructureStudioView::Angled);
     }
+    if (m_options.paper)
+        view.setAmbient(1.0);           // the rig in working light, for paper
     QImage img(size, QImage::Format_ARGB32_Premultiplied);
     img.fill(Qt::black);
     view.render(&img);
+    if (m_options.paper)
+    {
+        /* A shaded picture does not turn over (toPaper()) well -- a grey cyc
+           became a black slab -- so only the room's dark behind the rig
+           (StructureStudioView's fill) goes white. */
+        const QColor room(24, 26, 32);
+        for (int y = 0; y < img.height(); ++y)
+        {
+            QRgb *line = reinterpret_cast<QRgb *>(img.scanLine(y));
+            for (int x = 0; x < img.width(); ++x)
+                if (qAbs(qRed(line[x]) - room.red()) <= 3 && qAbs(qGreen(line[x]) - room.green()) <= 3
+                    && qAbs(qBlue(line[x]) - room.blue()) <= 3)
+                    line[x] = qRgb(255, 255, 255);
+        }
+    }
     return img;
 }
 
@@ -490,9 +507,7 @@ void PlotSheet::paintDrawing(QPainter *p, const Layout &l) const
     if (m_options.view == OverviewView)
     {
         const double k = 3.0;   // points to pixels: about 216 dpi on the page
-        QImage img = overviewImage(QSize(int(l.plot.width() * k), int(l.plot.height() * k)));
-        if (paper)
-            toPaper(img);
+        const QImage img = overviewImage(QSize(int(l.plot.width() * k), int(l.plot.height() * k)));
         p->drawImage(l.plot, img);
     }
     else if (v != nullptr && v->scene() != nullptr && !l.source.isEmpty())
