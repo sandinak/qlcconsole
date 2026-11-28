@@ -122,6 +122,11 @@ public:
     int fixtureCount() const;
     /** Fixtures on the plot that a hidden layer keeps off the sheet. */
     int hiddenCount() const { return m_hidden; }
+    /** Of fixtureCount(), those the plot draws as the count on their
+     *  structure (they bury it, or Fixtures on the Rig is off). */
+    int asCountCount() const { return m_asCount; }
+    /** The key's line that says so ("12 are drawn as the count on their structure"). */
+    QString asCountNote() const;
 
     /** The page, landscape, in points, less the margins. */
     QSizeF pageSizePoints() const;
@@ -167,6 +172,7 @@ private:
     QList<LayerRow> m_layers;
     QList<OwnerRow> m_owners;
     int m_hidden = 0;
+    int m_asCount = 0;
     QRectF m_sceneRect;     ///< what the drawing frames, in scene units
     double m_sceneUnitsPerMm = 0;
 };

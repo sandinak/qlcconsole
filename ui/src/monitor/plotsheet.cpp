@@ -121,7 +121,12 @@ QString typeOf(Fixture *fx)
         return fx->typeString();
     const QString m = def->manufacturer().trimmed(), n = def->model().trimmed();
     if (m.isEmpty() || m.compare(QLatin1String("Generic"), Qt::CaseInsensitive) == 0)
-        return n.isEmpty() ? fx->typeString() : QStringLiteral("Generic %1").arg(n);
+    {
+        // "Generic Generic" says nothing: the kind says what it is.
+        if (n.isEmpty() || n.compare(QLatin1String("Generic"), Qt::CaseInsensitive) == 0)
+            return QStringLiteral("Generic %1").arg(fx->typeString());
+        return QStringLiteral("Generic %1").arg(n);
+    }
     return n.isEmpty() ? m : QStringLiteral("%1 %2").arg(m, n);
 }
 
@@ -190,8 +195,15 @@ void PlotSheet::collect()
             ++m_hidden;
             continue;
         }
+        /* A light the plot shows as the count on its structure (it buries the
+           truss, or Fixtures on the Rig is off) is still on the plot: it is
+           counted, and the key says how many are drawn that way. */
         if (v != nullptr && !v->fixtureItemShouldBeVisible(fid))
-            continue;
+        {
+            if (props->fixtureRigProps(fid).primaryMount() == FixtureRigProps::NoMount)
+                continue;
+            ++m_asCount;
+        }
         const Fixture::StageLook look = drawnStageLook(fx);
         const QString type = typeOf(fx);
         const QString lookName = look == Fixture::AutoLook ? QString() : Fixture::stageLookName(look);
@@ -260,6 +272,12 @@ void PlotSheet::collect()
     }
     const double pad = qMax(frame.width(), frame.height()) * 0.02;
     m_sceneRect = frame.adjusted(-pad, -pad, pad, pad);
+}
+
+QString PlotSheet::asCountNote() const
+{
+    return m_asCount == 1 ? tr("1 is drawn as the count on its structure")
+                          : tr("%1 are drawn as the count on their structure").arg(m_asCount);
 }
 
 int PlotSheet::fixtureCount() const
@@ -600,7 +618,15 @@ void PlotSheet::paintSide(QPainter *p, const Layout &l) const
             p->setPen(kSoft);
             p->setFont(sub);
             p->drawText(QRectF(col.left() + 24, y, col.width() - 24, 14), Qt::AlignLeft | Qt::AlignVCenter,
-                        tr("%n more type(s): %1 fixtures", "", m_symbols.size() - shown).arg(rest));
+                        tr("%1 more types: %2 fixtures").arg(m_symbols.size() - shown).arg(rest));
+            y += 14;
+        }
+        if (m_asCount > 0)
+        {
+            p->setPen(kSoft);
+            p->setFont(sub);
+            p->drawText(QRectF(col.left(), y, col.width(), 14), Qt::AlignLeft | Qt::AlignVCenter,
+                        fit(sub, asCountNote(), col.width()));
             y += 14;
         }
         p->setPen(QPen(kRule, 0.6));
@@ -674,7 +700,7 @@ void PlotSheet::paintSide(QPainter *p, const Layout &l) const
     field(tr("Date"), locale.toString(m_options.date, QLocale::ShortFormat));
     field(tr("Revision"), m_options.revision);
     field(tr("View"), viewName(m_options.view));
-    field(tr("Scale"), l.barMm > 0 ? tr("as the bar shows (fit to page)") : tr("not to scale"));
+    field(tr("Scale"), l.barMm > 0 ? tr("fit to page: use the bar") : tr("not to scale"));
     field(tr("Sheet"), tr("1 of 1 · %1").arg(QPageSize(m_options.page).name()));
     p->setFont(sheetFont(6));
     p->setPen(kSoft);

@@ -66,6 +66,7 @@
 #undef private
 #include "monitorgraphicsview.h"
 #include "monitorproperties.h"
+#include "truss.h"
 #include "measurementunits.h"
 #include "plotsheet.h"
 #include "qlcfixturedef.h"
@@ -339,12 +340,27 @@ void PlotSheet_Test::theKeyCountsWhatIsDrawn()
     for (quint32 fid : view->fixtureItems().keys())
     {
         Fixture *fx = doc->fixture(fid);
-        if (fx == nullptr || !view->fixtureItemShouldBeVisible(fid))
+        if (fx == nullptr)
+            continue;
+        // Drawn, or drawn as the count on its structure (mounted, buried).
+        const bool mounted = doc->monitorProperties()->fixtureRigProps(fid).primaryMount()
+                             != FixtureRigProps::NoMount;
+        if (!view->fixtureItemShouldBeVisible(fid) && !mounted)
             continue;
         ++total;
-        want[fx->fixtureDef() != nullptr ? fx->fixtureDef()->model() : fx->typeString()]++;
+        // The key's name holds the model, or the kind for a generic.
+        QString model = fx->fixtureDef() != nullptr ? fx->fixtureDef()->model() : QString();
+        if (model.isEmpty() || model.compare(QLatin1String("Generic"), Qt::CaseInsensitive) == 0)
+            model = fx->typeString();
+        want[model]++;
     }
     QCOMPARE(sheet.fixtureCount(), total);
+    // stage-structures-demo's trusses are covered by their lights: the plot
+    // draws them as a count, and the key counts them and says so.
+    QVERIFY2(sheet.asCountCount() > 0, "the demo's buried lights were not counted");
+    QVERIFY(sheet.fixtureCount() > sheet.asCountCount());
+    QVERIFY2(sheetTexts(sheet).contains(sheet.asCountNote()),
+             qPrintable(sheetTexts(sheet).join(" | ")));
     QHash<QString, int> got;
     for (const PlotSheet::KeyRow &r : sheet.symbolKey())
     {
@@ -460,7 +476,8 @@ void PlotSheet_Test::theScaleBarFollowsSettingsUnits()
 
     MU::setPreferredLength(MU::Feet);
     const PlotSheet imperial(m_app->doc(), contextOf(mon), optionsFor(PlotSheet::TopView));
-    QVERIFY(std::fmod(imperial.scaleBarMm(), 304.8) < 0.01);   // whole feet
+    const double feet = imperial.scaleBarMm() / 304.8;          // whole feet
+    QVERIFY2(qAbs(feet - qRound(feet)) < 1e-6 && feet >= 1, qPrintable(QString::number(feet)));
 }
 
 void PlotSheet_Test::theStudioMenuOpensTheDialog()

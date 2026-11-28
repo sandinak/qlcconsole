@@ -214,13 +214,14 @@ void PlotPrintDialog::slotRefresh()
 {
     const PlotSheet s = sheet();
     const int types = s.symbolKey().size();
-    QString text = tr("%n fixture(s) on the sheet", "", s.fixtureCount());
-    text += QStringLiteral(" · ") + tr("%n type(s)", "", types);
+    const int n = s.fixtureCount();
+    QString text = n == 1 ? tr("1 fixture on the sheet") : tr("%1 fixtures on the sheet").arg(n);
+    text += QStringLiteral(" · ") + (types == 1 ? tr("1 type") : tr("%1 types").arg(types));
     const QString bar = s.scaleBarLabel();
     text += QStringLiteral(" · ") + (bar.isEmpty() ? tr("not to scale") : tr("scale bar %1").arg(bar));
     if (s.hiddenCount() > 0)
-        text += QStringLiteral("\n") + tr("%n on a hidden layer: not drawn. Show the layer in "
-                                          "Plot layers to print it.", "", s.hiddenCount());
+        text += QStringLiteral("\n") + tr("%1 on a hidden layer: not drawn. Show the layer in "
+                                          "Plot layers to print it.").arg(s.hiddenCount());
     m_summary->setText(text);
 
     const QSize room = m_preview->size().boundedTo(QSize(1400, 1000)) - QSize(16, 16);
