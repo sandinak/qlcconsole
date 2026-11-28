@@ -191,6 +191,7 @@ void StructureStudioView::startLightMap()
 {
     if (!m_lightMapOn || m_lightBusy || m_doc == nullptr)
         return;
+    m_lightPending = false;             // what it reads now is read here
     MonitorProperties *mp = m_doc->monitorProperties();
     const QVector<LightMap::Source> sources = lightSources();
     const BeamOcclusion::ModelPtr sight = mp->occlusionModel(m_doc);
@@ -220,7 +221,6 @@ void StructureStudioView::startLightMap()
     // The deck under each point is read here, on the GUI thread; the rest is pure.
     LightMap::Grid grid = LightMap::layout(mp, area, height, dark, kMaxCells);
     m_lightBusy = true;
-    m_lightPending = false;
     m_lightBusyKey = key;
     m_lightStarted.start();
     m_lightCancel = std::make_shared<std::atomic<bool>>(false);
