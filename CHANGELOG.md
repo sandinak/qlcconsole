@@ -14,6 +14,14 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
+- **Timeline drop when scrolled sideways**: a file or function dropped on
+  the pinned track-name column is refused, as it is unscrolled; it used to
+  land on the hidden time behind the column (the check read the scene x,
+  which scrolling moves under the column).
+- **Run tab's Edit Live switch at Student takes a click**: it greys itself
+  and reads **Edit Live · Standard**, as the footer chip, and a click shows
+  the line with **Switch to Standard**; it was disabled, so a click did
+  nothing.
 - **Cue lists follow the cue on stage.** The Virtual Console cue list (and the Run tab's) now keeps the active row in sight: it moves down to the middle of the list, then the list scrolls with the cue held in the middle, and at the end blank space lets the last cue reach the middle too. Back, a click or a jump do the same; a hand on the list isn't fought.
 
 ### Added

@@ -1104,8 +1104,12 @@ void MultiTrackView::buildBlankSidebarMenu(QMenu *menu)
 
 bool MultiTrackView::dropTarget(const QPoint &pos, quint32 *timeMs, Track **track) const
 {
+    /* The track-header column is pinned to the viewport's left edge
+       (pinLeftColumn()), so whether the pointer is over it is a viewport
+       x: scrolled sideways, the scene x under the column is the scroll
+       offset, and a drop there used to land on the hidden time behind it. */
     const QPointF sp = mapToScene(pos);
-    if (sp.x() < TRACK_WIDTH || sp.y() < TRACKS_TOP)
+    if (pos.x() < TRACK_WIDTH || sp.y() < TRACKS_TOP)
         return false;
     if (timeMs != NULL)
         *timeMs = snapTimeMs(getTimeFromPosition(sp.x()));
@@ -1209,8 +1213,9 @@ void MultiTrackView::dropEvent(QDropEvent *event)
 
     QPointF scenePos = mapToScene(qlcEventPos(event));
 
-    // A drop to the left of the tracks column is not on the timeline.
-    if (scenePos.x() < TRACK_WIDTH)
+    // A drop on the (pinned) track-header column is not on the timeline:
+    // a viewport x, as dropTarget().
+    if (qlcEventPos(event).x() < TRACK_WIDTH)
     {
         event->ignore();
         return;

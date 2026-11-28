@@ -657,6 +657,66 @@ void ShowManager_Test::droppedVideoLandsOnTheTrack()
     QCOMPARE(m_show->tracks().first()->showFunctions().count(), 1);
 }
 
+/* Scrolled sideways, the track-header column stays pinned at the left
+   edge. A drop over it is on a track's name, not the timeline: refused, as
+   it is unscrolled. A drop just right of it lands at the time shown there,
+   on the row under the pointer, scrolled down as well. (It used to test
+   the scene x, so a drop on the column landed on the hidden time behind
+   it, and a drop next to it was wrong by nothing only when unscrolled.) */
+void ShowManager_Test::aDropOnAScrolledTimelineLandsWhereItIsShown()
+{
+    for (int i = 0; i < 6; i++)
+    {
+        Track *t = new Track();
+        t->setName(QString("T%1").arg(i));
+        m_show->addTrack(t);
+    }
+    m_manager->updateMultiTrackView();
+    m_manager->resize(800, 380);
+    m_manager->show();
+    QVERIFY(QTest::qWaitForWindowExposed(m_manager));
+    MultiTrackView *v = m_manager->m_showview;
+    QCOMPARE(v->m_tracks.count(), 7);
+    v->horizontalScrollBar()->setValue(600);
+    v->verticalScrollBar()->setValue(v->verticalScrollBar()->maximum());
+    QCOMPARE(v->horizontalScrollBar()->value(), 600);
+    QVERIFY(v->verticalScrollBar()->value() > TRACK_HEIGHT);
+
+    // The last track, on screen after the vertical scroll.
+    const int row = v->m_tracks.count() - 1;
+    Track *last = v->m_tracks.at(row)->getTrack();
+    const int vy = v->mapFromScene(QPointF(0, TRACKS_TOP + row * TRACK_HEIGHT + TRACK_HEIGHT / 2)).y();
+    QVERIFY(vy > 0 && vy < v->viewport()->height());
+
+    // On the pinned header column: not the timeline.
+    quint32 t = 0;
+    Track *trk = nullptr;
+    QVERIFY(!v->dropTarget(QPoint(TRACK_WIDTH / 2, vy), &t, &trk));
+
+    // Just right of it: the time shown there, the row under the pointer.
+    const QPoint at(TRACK_WIDTH + 40, vy);
+    QVERIFY(v->dropTarget(at, &t, &trk));
+    QCOMPARE(trk, last);
+    const quint32 shown = v->getTimeFromPosition(v->mapToScene(at).x());
+    QVERIFY2(qAbs(qint64(t) - qint64(shown)) <= 1000, qPrintable(QString("%1 vs %2").arg(t).arg(shown)));
+
+    // A function dragged from the sidebar onto the column: refused too.
+    // By name: MultiTrackView is not exported from the UI library (dllsignals_test).
+    QSignalSpy dropped(v, SIGNAL(functionDropped(quint32,quint32,Track*)));
+    QMimeData md;
+    QByteArray data;
+    QDataStream out(&data, QIODevice::WriteOnly);
+    out << m_sceneB;
+    md.setData("application/x-qlcplus-functions", data);
+    QDropEvent onColumn(QPointF(TRACK_WIDTH / 2, vy), Qt::CopyAction, &md, Qt::LeftButton, Qt::NoModifier);
+    v->dropEvent(&onColumn);
+    QCOMPARE(dropped.count(), 0);
+    QDropEvent onTimeline(QPointF(at), Qt::CopyAction, &md, Qt::LeftButton, Qt::NoModifier);
+    v->dropEvent(&onTimeline);
+    QCOMPARE(dropped.count(), 1);
+    QCOMPARE(qvariant_cast<Track *>(dropped.at(0).at(2)), last);
+}
+
 void ShowManager_Test::anUnsupportedDropSaysWhy()
 {
     const QString path = dropDir()->filePath("notes.txt");
