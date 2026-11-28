@@ -371,7 +371,14 @@ QString LayoutDiagnostics::mainLayoutProblem(const QMainWindow *mw)
     const int floor = hasBar ? sb->geometry().top() - 1 : mw->height() - 1;
     if ((c.right() < mw->width() - 1 && c.width() < central->maximumWidth())
         || (c.bottom() < floor && c.height() < central->maximumHeight()))
-        return QStringLiteral("the central area is %1 in a %2 window").arg(rect(c), sz(mw->size()));
+    {
+        // The bar beside it, as the layout would size it: what it was told and what it is.
+        const QString bar = hasBar ? QStringLiteral("; the status bar is %1, size hint %2, height for its width %3")
+                                         .arg(rect(sb->geometry()), sz(sb->sizeHint()))
+                                         .arg(sb->heightForWidth(mw->width()))
+                                   : QString();
+        return QStringLiteral("the central area is %1 in a %2 window%3").arg(rect(c), sz(mw->size()), bar);
+    }
     return QString();
 }
 
