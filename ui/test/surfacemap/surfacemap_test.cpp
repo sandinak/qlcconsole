@@ -459,13 +459,8 @@ void SurfaceMap_Test::aFooterClickNeverGoesLive()
     app.show();
     settle();
     QCOMPARE(doc->mode(), Doc::Design);
-    // The Design/Operate chip does not go live.
-    QVERIFY(app.m_statusModeChipLabel->isVisibleTo(app.statusBar()));
-    QTest::mouseClick(app.m_statusModeChipLabel, Qt::LeftButton);
-    settle();
-    QCOMPARE(doc->mode(), Doc::Design);
-    QVERIFY2(app.statusBar()->currentMessage().contains("Operate"), qPrintable(app.statusBar()->currentMessage()));
-    // Nor does a board's chip (it opens a map).
+    // (The footer has no Design/Operate chip: nothing there to click into Operate.)
+    // A board's chip does not take the show live either (it opens a map).
     for (quint32 u : app.m_statusSurfaceChips->universes())
     {
         app.m_statusSurfaceChips->chip(u)->click();

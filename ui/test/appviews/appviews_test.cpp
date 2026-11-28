@@ -1471,9 +1471,10 @@ void AppViews_Test::theViewMenuIsOnlyViews()
     foreach (QAction *a, view->actions())
         if (!a->isSeparator() && a->isVisible())
             items << a->text();
-    // 0.3.1 (k): QLC+ 4's Monitor and Full Screen are ways of looking too.
+    // 0.3.1 (k): QLC+ 4's Monitor and Full Screen are ways of looking too; the Footer
+    // submenu is which of the footer's chips to look at.
     QCOMPARE(items, QStringList() << "Workspace" << "Address Tool" << "DMX Monitor" << "Rig Overview…"
-                                  << "Quick Focus…" << "Venue…" << "Blind" << "Full Screen");
+                                  << "Quick Focus…" << "Venue…" << "Footer" << "Blind" << "Full Screen");
 }
 
 void AppViews_Test::theGridFollowsTheUnitPreference()
@@ -7583,7 +7584,7 @@ void AppViews_Test::theFooterRightSideSharesOneLine()
     m_app->m_statusFollowLabel->setText(QString::fromUtf8("\xe2\x97\x8e Follow \xc2\xb7 Lanterns"));
     m_app->m_statusFollowLabel->show();
     const QList<QWidget *> items = { m_app->m_statusSelectionLabel, m_app->m_statusFollowLabel,
-                                     m_app->m_statusModeChipLabel, m_app->m_statusStage,
+                                     m_app->m_statusStage,
                                      m_app->m_statusDirtyLabel };
     const QByteArray shotDir = qgetenv("QLC_SHOT_DIR");
     for (const QSize &sz : { QSize(1024, 640), QSize(1280, 800), QSize(1920, 1080) })

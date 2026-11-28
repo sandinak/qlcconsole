@@ -71,6 +71,7 @@
 #define private public
 #define protected public
 #include "app.h"
+#include "footericons.h"
 #include "refinepanel.h"
 #include "speedmastersfooter.h"
 #include "shownotespane.h"
@@ -1963,6 +1964,55 @@ void LayoutSanity_Test::theFooterChipsNeverOverlap()
     settle();
 }
 
+void LayoutSanity_Test::theFooterIconsFitAt1024x640InDesignAndOperate()
+{
+    QStatusBar *sb = m_app->statusBar();
+    const Doc::Mode oldMode = m_app->doc()->mode();
+    m_app->doc()->setModified();
+    const QSize old = m_app->size();
+    for (const Doc::Mode mode : { Doc::Design, Doc::Operate })
+    {
+        m_app->doc()->setMode(mode);
+        m_app->resize(1024, 640);
+        settle();
+        QTest::qWait(100);
+        m_app->fitFooterNow();
+        settle();
+        const QString where = mode == Doc::Design ? QStringLiteral("Design") : QStringLiteral("Operate");
+        QList<QWidget *> items;
+        for (QWidget *c : sb->findChildren<QWidget *>(QString(), Qt::FindDirectChildrenOnly))
+            if (c->isVisibleTo(sb) && c->width() > 0 && !qobject_cast<QSizeGrip *>(c))
+                items << c;
+        QVERIFY2(!items.isEmpty(), qPrintable(where));
+        for (int i = 0; i < items.size(); ++i)
+        {
+            QVERIFY2(QRect(QPoint(0, 0), sb->size()).contains(items.at(i)->geometry()),
+                     qPrintable(where + QStringLiteral(": %1 is clipped by the footer").arg(items.at(i)->objectName())));
+            for (int j = i + 1; j < items.size(); ++j)
+                QVERIFY2(!items.at(i)->geometry().intersects(items.at(j)->geometry()),
+                         qPrintable(where + QStringLiteral(": %1 overlaps %2")
+                                        .arg(items.at(i)->objectName(), items.at(j)->objectName())));
+            // A chip with text has room for all of it.
+            if (QLabel *l = qobject_cast<QLabel *>(items.at(i)))
+                if (!l->text().isEmpty() && !l->wordWrap() && l->textFormat() != Qt::RichText)
+                    QVERIFY2(l->width() >= l->fontMetrics().horizontalAdvance(l->text()),
+                             qPrintable(where + QStringLiteral(": %1 \"%2\" is cut").arg(l->objectName(), l->text())));
+        }
+        // An icon is never left without its chip, nor its chip without it.
+        for (FooterBadge *b : m_app->m_footerBadges)
+        {
+            if (b->chip()->isHidden())
+                QVERIFY2(!b->isVisibleTo(sb), qPrintable(where + ": an icon alone: " + b->id()));
+            else if (b->chip()->width() > 0)
+                QVERIFY2(b->isVisibleTo(sb), qPrintable(where + ": a chip without its icon: " + b->id()));
+        }
+    }
+    m_app->doc()->setMode(oldMode);
+    m_app->doc()->resetModified();
+    m_app->resize(old);
+    settle();
+}
+
 void LayoutSanity_Test::eachLevelLaysOutCleanly()
 {
     /* Workspace levels (WORKSPACE_LEVELS §6): each level, in the qlcconsole
@@ -2003,8 +2053,9 @@ void LayoutSanity_Test::eachLevelLaysOutCleanly()
                 QVERIFY2(bar->count() >= 6, qPrintable(where));
                 QWidget *chip = m_app->m_statusLevelLabel;
                 QVERIFY(chip != nullptr);
-                if (l == ShowLevel::Standard)
-                    QVERIFY2(chip->isHidden(), qPrintable(where + ": a level chip at Standard"));
+                // Only Student is said (the course needs it); Standard and Advanced show nothing.
+                if (l != ShowLevel::Student)
+                    QVERIFY2(chip->isHidden(), qPrintable(where + ": a level chip at " + ShowLevel::name(ShowLevel::Level(l))));
                 else if (w >= 1280)
                     QVERIFY2(chip->isVisibleTo(sb) && chip->width() > 0,
                              qPrintable(where + ": the level chip was squeezed out"));

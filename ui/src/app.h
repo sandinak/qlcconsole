@@ -34,6 +34,7 @@
 #include <QPair>
 #include <QPalette>
 #include <QPointer>
+#include <QHash>
 #include <functional>
 
 #include "dmxdumpfactoryproperties.h"
@@ -449,6 +450,24 @@ public:
     class QMenu *footerChipMenu(const QPoint &globalPos, bool exec = true);
     /** The speed masters' beat (SpeedMastersFooter's settings) read again. */
     void reloadFooterBeatOptions();
+
+    /** View ▸ Footer: every chip by its FooterIcons id, shown or hidden for
+     *  this computer (QSettings footer/hidden; the four optional chips keep
+     *  their own keys). A safety chip (FooterIcons::Entry::locked) is never
+     *  hidden. */
+    bool footerShown(const QString &id) const;
+    bool setFooterShown(const QString &id, bool shown);
+    /** Every chip as it was shipped. */
+    void resetFooter();
+    /** The chip widget behind @p id and its icon. */
+    QWidget *footerChip(const QString &id) const;
+    class FooterBadge *footerBadge(const QString &id) const;
+    /** The View ▸ Footer submenu (its items are made as it opens). */
+    class QMenu *footerMenu() const { return m_footerMenu; }
+    /** (Re)make the submenu's items; as it opens, and a test. */
+    void populateFooterMenu();
+    /** Fit the footer at once (a test; it is otherwise queued). */
+    void fitFooterNow() { fitStatusBar(); }
 
 private:
     int m_theme = ThemeDefault;
@@ -1387,12 +1406,6 @@ private:
     class QFrame *m_statusShowTreeNotice = nullptr;
     class QPushButton *m_statusShowTreeButton = nullptr;
     bool m_showTreeNoticeDismissed = false;
-    /** Persistent Design/Operate indicator — the toolbar's mode-toggle
-     *  button/icon always shows the mode a click would switch TO, not the
-     *  current one (standard play/pause-style affordance), so there was no
-     *  always-on "you are here" readout anywhere. This is that readout,
-     *  same footer-chip pattern as Blackout/Blind. */
-    QLabel* m_statusModeChipLabel = nullptr;
     /** The one override indicator (Q80): what is holding the rig over the
      *  show right now -- Park, Highlight, Hold at end, Focus mode, Blind --
      *  and a click clears them all. Hidden when nothing is. */
@@ -1400,6 +1413,15 @@ private:
     /** "Testing channels: N held": Test mode on Connections' DMX map is on
      *  (hidden otherwise); a click turns it off. */
     class QToolButton* m_statusTestChip = nullptr;
+    /** Add @p chip to the footer with its icon (FooterBadge) before it. */
+    void addFooterChip(class QStatusBar *sb, QWidget *chip, const QString &id, bool permanent = false,
+                       bool withBadge = true);
+    QHash<QString, QWidget *> m_footerChips;
+    void syncFooterBadge(class FooterBadge *badge);
+    QList<class FooterBadge *> m_footerBadges;
+    QHash<QObject *, class FooterBadge *> m_footerBadgeOf;
+    QSet<QString> m_footerHidden;
+    class QMenu *m_footerMenu = nullptr;
     class DeskChip* m_statusDeskChip = nullptr;
     class SurfaceChips* m_statusSurfaceChips = nullptr;
     class EditLiveChip* m_statusEditLive = nullptr;

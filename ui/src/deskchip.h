@@ -30,13 +30,14 @@ class Doc;
  */
 
 /**
- * The footer's chip for this computer's desk (DeskRecord): hidden while no
- * role is learned, else
- *  - green "Desk": every role that is on reaches the program;
+ * The footer's warning for this computer's desk (DeskRecord): hidden while no
+ * role is learned, and while all is well (the surface chips name the
+ * boards); else
+ *  - green (not shown): every role that is on reaches the program;
  *  - amber: a role is off, its device is not plugged in, two devices of one
  *    name can't be told apart, or the Grand Master waits to pick up;
- *  - grey (NotPatched): a role's device is here but this show's patch lacks
- *    it -- not set up yet, not a fault (UX-29) -- and a click is Patch It
+ *  - red (NotPatched): a role's device is here but this show's patch lacks
+ *    it, "Desk not patched: Patch It" -- and a click is Patch It
  *    (named; the chip then offers Undo for a while).
  * Its tooltip says each role and what GO plays now (the Run tab's list,
  * named). A click on green or amber opens Connections ▸ Control surfaces.

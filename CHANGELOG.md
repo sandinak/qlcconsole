@@ -20,6 +20,8 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 - Timeline: right-click the Functions list to add a function at the playhead (on the picked track or a new one), open it, or make a new Scene/Chaser/Collection/RGB Matrix/EFX; a right-click on the blank track-header column works with the timeline scrolled sideways.
 - **A hazard bench show**: `test-workspaces/hazard-arming.qlcc` -- a CO2 jet (Hazard — Burst), a hazer (Hazard — Running) and a wash on the OLA probe's Art-Net 0:0:15, cues Preset, CO2 hit, Haze on, Haze off, Blackout, the desk's Hazard controls left to learn on the board; the jet and the hazer stand on the deck and the wash hangs on a front pipe at 16'; built and checked by the app's own engine in the gate.
+- **Footer icons and View ▸ Footer**: every footer chip has a small icon that says what it reports (bolt for power, clock for timecode, map pin for the venue, a cue glyph for the next cue, fader for the Grand Master, checklist for Review, controller board for surfaces, game controller for Pad, pencil for Edit Live, lamp for the selected fixtures, disk for Saved), with its name in the tooltip; a squeezed chip shrinks to its icon before it goes. **View ▸ Footer** ticks each chip on or off for this computer, **Reset Footer** puts them back; safety chips are always shown. The Design / Operate chip, the ADVANCED mark and the Desk chip while all is well are gone; STUDENT and a red *Desk not patched: Patch It* stay.
+
 - **Behaves as** (board Q350, Q351): every fixture is a Light, Machinery,
   One-shot, Switch or Hazard -- guessed from its definition and plot
   symbol (old shows load unchanged), set in Fixture Properties, shown in

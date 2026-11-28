@@ -47,6 +47,7 @@
 #include "inputoutputmanager.h"
 #include "deskchip.h"
 #include "surfacechips.h"
+#include "footericons.h"
 #include "deskrecord.h"
 #include "editlivechip.h"
 #include "surfacemap.h"
@@ -246,6 +247,7 @@ typedef BOOL (WINAPI *SetProcessInformationType)(
 #define SETTINGS_TAB_LABEL_MODE    QStringLiteral("workspace/tabLabelMode")
 #define SETTINGS_THEME             QStringLiteral("workspace/theme")
 #define SETTINGS_SCROLLBARS        QStringLiteral("workspace/alwaysShowScrollBars")
+#define SETTINGS_FOOTER_HIDDEN     QStringLiteral("footer/hidden")
 #define SETTINGS_SHOW_FOOTER_LOAD  QStringLiteral("workspace/showFooterLoad")
 #define SETTINGS_SHOW_FOOTER_POWER QStringLiteral("workspace/showFooterPower")
 #define SETTINGS_SHOW_FOOTER_GM    QStringLiteral("workspace/showFooterGM")
@@ -994,6 +996,11 @@ void App::init()
         m_showFooterPower = settings.value(SETTINGS_SHOW_FOOTER_POWER, true).toBool();
         m_showFooterGM = settings.value(SETTINGS_SHOW_FOOTER_GM, true).toBool();
         m_showFooterSpeed = settings.value(SETTINGS_SHOW_FOOTER_SPEED, true).toBool();
+        const QStringList hidden = settings.value(SETTINGS_FOOTER_HIDDEN).toStringList();
+        for (const QString &id : hidden)
+            if (const FooterIcons::Entry *e = FooterIcons::find(id))
+                if (!e->locked && e->legacyChip < 0)
+                    m_footerHidden.insert(id);
     }
 
     if (m_startupWindow != NULL)
@@ -2734,15 +2741,6 @@ void App::slotModeChanged(Doc::Mode mode)
         m_modeToggleAction->setText(tr("Design"));
         m_modeToggleAction->setToolTip(tr("Switch to design mode"));
 
-        if (m_statusModeChipLabel != NULL)
-        {
-            m_statusModeChipLabel->setText(tr("OPERATE"));
-            // #2e7d32 (Material green 800) is tuned for a light background —
-            // computed ~3.25:1 against the dark themes' window color, marginal
-            // even for bold text. #43a047 (green 600) keeps the same "live"
-            // green identity with real contrast margin on both light and dark.
-            m_statusModeChipLabel->setStyleSheet("QLabel { font-weight: bold; color: #43a047; }");
-        }
 
         // A muted rig never survives into a live show: Design's Blind goes
         // off. In Operate the same button is the Blind VIEW -- the screens
@@ -2788,18 +2786,6 @@ void App::slotModeChanged(Doc::Mode mode)
         m_modeToggleAction->setText(tr("Operate"));
         m_modeToggleAction->setToolTip(tr("Switch to operate mode"));
 
-        if (m_statusModeChipLabel != NULL)
-        {
-            m_statusModeChipLabel->setText(tr("DESIGN"));
-            // DESIGN is the neutral state (vs. OPERATE's deliberate green) —
-            // palette(text) instead of a hardcoded hex so it actually follows
-            // App::applyTheme()'s app-wide QPalette swap (confirmed real via
-            // qApp->setPalette()) rather than staying tuned to the light
-            // default and going low-contrast on the dark themes, same
-            // problem the hardcoded #555 here had.
-            m_statusModeChipLabel->setStyleSheet(
-                "QLabel { font-weight: bold; color: palette(text); }");
-        }
     }
 
     // The "under timeline control" chip + exit button are Operate-only.
@@ -3209,11 +3195,6 @@ void App::applyShowControlsPlacement()
         statusBar()->addPermanentWidget(m_showControls->modeSwitch());
         m_showControls->show();
         m_showControls->modeSwitch()->show();
-        // The switch says the mode right here, and Blackout lights up: the
-        // DESIGN / BLACKOUT chips would say it all twice, in a footer short
-        // of room.
-        if (m_statusModeChipLabel != NULL)
-            m_statusModeChipLabel->hide();
     }
     else
     {
@@ -3221,8 +3202,6 @@ void App::applyShowControlsPlacement()
         statusBar()->removeWidget(m_showControls->modeSwitch());
         m_showControls->setInStatusBar(false);
         m_mainBar->setShowControls(m_showControls, m_showControls->modeSwitch());
-        if (m_statusModeChipLabel != NULL)
-            m_statusModeChipLabel->show();
         m_mainBar->setHosting(true);
         m_mainBar->hostTabTools(m_tab != NULL ? m_tab->currentWidget() : NULL);
         m_toolbar->show();
@@ -3605,6 +3584,14 @@ void App::initMenuBar()
     venueAct->setVisible(ShowFeatures::isOn(ShowFeatures::Venues));
     connect(venueAct, &QAction::triggered, this, [this]() { openVenueMenu(); });
     m_venueAction = venueAct;
+
+    /* View ▸ Footer: which chips the footer shows, each with its icon;
+       saved for this computer. Safety chips stay (greyed, checked). Its items
+       are made as it opens, so the menu bar's item count does not grow. */
+    m_footerMenu = viewMenu->addMenu(tr("Footer"));
+    m_footerMenu->setObjectName(QStringLiteral("viewFooterMenu"));
+    m_footerMenu->menuAction()->setToolTip(tr("Choose which chips the footer shows"));
+    connect(m_footerMenu, &QMenu::aboutToShow, this, &App::populateFooterMenu);
 
     viewMenu->addSeparator();
     // Blind: what the screens show against the stage -- Design mutes the
@@ -5443,13 +5430,13 @@ QList<QWidget *> App::statusChipsByPriority() const
        the chip squeezed out to make room. */
     const bool goHeld = m_statusStandby != nullptr && m_statusStandby->property("goHeld").toBool();
     const QList<QWidget *> order = {
-        m_statusStage, m_statusDirtyLabel, m_statusModeChipLabel,
+        m_statusStage, m_statusDirtyLabel,
         goHeld ? m_statusStandby : nullptr,
-        m_statusPadRoleLabel, m_statusFollowLabel, m_statusModeLabel, m_statusHazardLabel,
+        m_statusPadRoleLabel, m_statusFollowLabel, m_statusModeLabel, m_statusHazardLabel, m_statusLevelLabel,
         m_statusShowOnlyLabel, m_statusOverridesChip, m_statusTestChip, m_statusProgrammerLabel,
         m_statusGrandMasterBox, m_statusMastersHeldLabel, m_statusReviewLabel, m_venueChip,
         m_statusSelectionLabel, m_statusPadModeLabel,
-        goHeld ? nullptr : m_statusStandby, m_statusTeachingLabel, m_statusLevelLabel, m_statusSpeedMasters, m_statusRigNetLabel, m_statusUpdateLabel,
+        goHeld ? nullptr : m_statusStandby, m_statusTeachingLabel, m_statusSpeedMasters, m_statusRigNetLabel, m_statusUpdateLabel,
         m_statusShowTreeNotice, m_statusTimecodeLabel, m_statusLoadLabel,
         m_statusPowerLabel, m_statusDangleLabel, m_statusTimelineLabel
     };
@@ -5471,8 +5458,39 @@ void App::fitStatusBar()
     // What is not on the list (the Run controls, the spacers, the size grip)
     // keeps its place.
     for (QWidget *w : sb->findChildren<QWidget *>(QString(), Qt::FindDirectChildrenOnly))
+    {
+        // A chip's icon is counted with its chip, below.
+        const FooterBadge *own = qobject_cast<FooterBadge *>(w);
+        if (own != nullptr && chips.contains(own->chip()))
+            continue;
         if (!chips.contains(w) && w->isVisibleTo(sb))
             room -= qMax(w->sizeHint().width(), w->minimumWidth()) + gap;
+    }
+    // A chip put away in View ▸ Footer that is not in the squeeze list.
+    for (const QString &id : std::as_const(m_footerHidden))
+    {
+        QWidget *w = footerChip(id);
+        if (w == nullptr || chips.contains(w))
+            continue;
+        const bool squeezed = w->property("statusSqueezed").toBool();
+        if (!squeezed)
+        {
+            w->setProperty("statusMinWidth", w->minimumWidth());
+            w->setProperty("statusMaxWidth", w->maximumWidth());
+            w->setProperty("statusSqueezed", true);
+            w->setMinimumWidth(0);
+            w->setMaximumWidth(0);
+        }
+    }
+    for (QWidget *w : sb->findChildren<QWidget *>(QString(), Qt::FindDirectChildrenOnly))
+        if (w->property("statusSqueezed").toBool() && !chips.contains(w) && !w->property("footerBadge").toBool()
+            && !m_footerHidden.contains(w->property("footerId").toString()))
+        {
+            // Put back (shown again in View ▸ Footer).
+            w->setProperty("statusSqueezed", false);
+            w->setMinimumWidth(w->property("statusMinWidth").toInt());
+            w->setMaximumWidth(w->property("statusMaxWidth").toInt());
+        }
     /* A squeezed chip is 0 wide but still an item of the bar's layout, with
        the spacing beside it: every shown chip's gap first, then the widths.
        Counted as each chip was decided, the gaps of the squeezed ones after
@@ -5481,7 +5499,12 @@ void App::fitStatusBar()
        (gate 043j, Linux fonts). */
     for (QWidget *w : chips)
         if (w->isVisibleTo(sb))
+        {
             room -= gap;
+            // Its icon is an item of its own, with its own gap.
+            if (m_footerBadgeOf.contains(w) && !m_footerHidden.contains(w->property("footerId").toString()))
+                room -= gap;
+        }
     // A size hint does not move with the maximum width, so a squeezed chip
     // is measured as it would be drawn: this is the same answer every time
     // the sizes have not changed, and then nothing is touched.
@@ -5496,6 +5519,10 @@ void App::fitStatusBar()
         const bool squeezed = w->property("statusSqueezed").toBool();
         const int minW = squeezed ? w->property("statusMinWidth").toInt() : w->minimumWidth();
         int want = qMax(qMax(w->sizeHint().width(), w->minimumSizeHint().width()), minW);
+        FooterBadge *badge = m_footerBadgeOf.value(w, nullptr);
+        const bool userHidden = m_footerHidden.contains(w->property("footerId").toString());
+        const int iconW = badge != nullptr && !userHidden ? badge->iconWidth() : 0;
+        const int roomForText = room - iconW;
         if (w == m_statusFollowLabel && !m_followChipVariants.isEmpty())
         {
             /* The follow chip shortens before it goes: the longest of its
@@ -5503,7 +5530,7 @@ void App::fitStatusBar()
                its tooltip. */
             int at = m_followChipVariants.size() - 1;
             for (int i = 0; i < m_followChipVariants.size(); ++i)
-                if (qMax(followChipWidth(m_followChipVariants.at(i)), minW) <= room)
+                if (qMax(followChipWidth(m_followChipVariants.at(i)), minW) <= roomForText)
                 {
                     at = i;
                     break;
@@ -5515,9 +5542,23 @@ void App::fitStatusBar()
                 m_statusFollowLabel->setText(followChipHtml(m_followChipVariants.at(at)));
             }
         }
-        const bool fits = want <= room;
+        const bool fits = !userHidden && want <= roomForText;
         if (fits)
-            room -= want;
+            room -= want + iconW;
+        /* Squeezed for room, the chip shrinks to its icon before it goes:
+           the icon names what it was, the full line is in the tooltip. */
+        const bool iconOnly = !fits && !userHidden && badge != nullptr && iconW <= room;
+        if (iconOnly)
+            room -= iconW;
+        if (badge != nullptr)
+        {
+            const bool dropped = !fits && !iconOnly;
+            if (badge->property("footerDropped").toBool() != dropped)
+            {
+                badge->setProperty("footerDropped", dropped);
+                syncFooterBadge(badge);
+            }
+        }
         if (fits && squeezed)
         {
             // Back as it was (a chip of a fixed width has both ends set).
@@ -6710,19 +6751,12 @@ void App::updateLevelChip()
         return;
     const ShowLevel *sl = ShowLevel::instance();
     const ShowLevel::Level l = sl->chosenLevel();
-    const bool show = sl->applies() && l != ShowLevel::Standard;
-    if (l == ShowLevel::Student)
-    {
-        m_statusLevelLabel->setText(tr("STUDENT"));
-        m_statusLevelLabel->setToolTip(tr("The Student level: the Show Tree, Run, focus calls and the "
-                                          "Lighting Studio. Click for the levels."));
-    }
-    else
-    {
-        m_statusLevelLabel->setText(tr("ADVANCED"));
-        m_statusLevelLabel->setToolTip(tr("The Advanced level: Standard and the expert tools. Click "
-                                          "for the levels."));
-    }
+    // Only the Student level is said (the course needs it); Standard and
+    // Advanced show nothing -- View ▸ Workspace has the level.
+    const bool show = sl->applies() && l == ShowLevel::Student;
+    m_statusLevelLabel->setText(tr("STUDENT"));
+    m_statusLevelLabel->setToolTip(tr("The Student level: the Show Tree, Run, focus calls and the "
+                                      "Lighting Studio. Click for the levels."));
     m_statusLevelLabel->setVisible(show);
     if (m_statusFitTimer != nullptr)
         m_statusFitTimer->start();
@@ -8694,6 +8728,141 @@ QMenu *App::footerChipMenu(const QPoint &globalPos, bool exec)
     return menu;
 }
 
+void App::addFooterChip(QStatusBar *sb, QWidget *chip, const QString &id, bool permanent, bool withBadge)
+{
+    chip->setProperty("footerId", id);
+    m_footerChips.insert(id, chip);
+    if (withBadge)
+    {
+        FooterBadge *badge = new FooterBadge(id, chip, this);
+        const int h = fontMetrics().height() + 4;
+        badge->setFixedHeight(h);
+        m_footerBadges << badge;
+        m_footerBadgeOf.insert(chip, badge);
+        chip->installEventFilter(this);
+        if (permanent)
+            sb->addPermanentWidget(badge);
+        else
+            sb->addWidget(badge, 0);
+        syncFooterBadge(badge);
+    }
+    if (permanent)
+        sb->addPermanentWidget(chip);
+    else
+        sb->addWidget(chip, 0);
+    if (FooterBadge *badge = m_footerBadgeOf.value(chip, nullptr))
+        syncFooterBadge(badge);
+}
+
+void App::syncFooterBadge(FooterBadge *badge)
+{
+    const bool user = m_footerHidden.contains(badge->id());
+    badge->setVisible(!badge->chip()->isHidden() && !user && !badge->property("footerDropped").toBool());
+}
+
+QWidget *App::footerChip(const QString &id) const
+{
+    return m_footerChips.value(id, nullptr);
+}
+
+FooterBadge *App::footerBadge(const QString &id) const
+{
+    for (FooterBadge *b : m_footerBadges)
+        if (b->id() == id)
+            return b;
+    return nullptr;
+}
+
+bool App::footerShown(const QString &id) const
+{
+    const FooterIcons::Entry *e = FooterIcons::find(id);
+    if (e != nullptr && e->legacyChip >= 0)
+        return footerChipShown(FooterChip(e->legacyChip));
+    return !m_footerHidden.contains(id);
+}
+
+bool App::setFooterShown(const QString &id, bool shown)
+{
+    const FooterIcons::Entry *e = FooterIcons::find(id);
+    if (e == nullptr || (e->locked && !shown))
+        return false;
+    if (e->legacyChip >= 0)
+    {
+        setFooterChipShown(FooterChip(e->legacyChip), shown);
+        return true;
+    }
+    if (shown)
+        m_footerHidden.remove(id);
+    else
+        m_footerHidden.insert(id);
+    QStringList list = QStringList(m_footerHidden.begin(), m_footerHidden.end());
+    list.sort();
+    QSettings settings;
+    if (list.isEmpty())
+        settings.remove(SETTINGS_FOOTER_HIDDEN);
+    else
+        settings.setValue(SETTINGS_FOOTER_HIDDEN, list);
+    if (FooterBadge *b = footerBadge(id))
+        syncFooterBadge(b);
+    if (m_statusFitTimer != nullptr)
+        m_statusFitTimer->start();
+    return true;
+}
+
+void App::resetFooter()
+{
+    const QSet<QString> was = m_footerHidden;
+    m_footerHidden.clear();
+    QSettings().remove(SETTINGS_FOOTER_HIDDEN);
+    // The four optional chips as they ship: Load off, the rest on.
+    setFooterChipShown(FooterLoad, false);
+    setFooterChipShown(FooterPower, true);
+    setFooterChipShown(FooterGrandMaster, true);
+    setFooterChipShown(FooterSpeedMasters, true);
+    for (const QString &id : was)
+        if (FooterBadge *b = footerBadge(id))
+            syncFooterBadge(b);
+    if (m_statusFitTimer != nullptr)
+        m_statusFitTimer->start();
+}
+
+void App::populateFooterMenu()
+{
+    if (m_footerMenu == nullptr)
+        return;
+    m_footerMenu->clear();
+    m_footerMenu->setToolTipsVisible(true);
+    const QColor ink = m_footerMenu->palette().color(QPalette::WindowText);
+    for (const FooterIcons::Entry &e : FooterIcons::entries())
+    {
+        QAction *a = m_footerMenu->addAction(FooterIcons::icon(e.glyph, ink), e.label);
+        a->setObjectName(QStringLiteral("footerShow_%1").arg(e.id));
+        a->setCheckable(true);
+        a->setChecked(footerShown(e.id));
+        if (e.locked)
+        {
+            a->setChecked(true);
+            a->setEnabled(false);
+            a->setToolTip(tr("Always shown: it reports something the operator must not miss."));
+        }
+        else if (e.legacyChip >= 0 && !ShowFeatures::isOn(ShowFeatures::Feature(footerChipFeature(FooterChip(e.legacyChip)))))
+        {
+            a->setEnabled(false);
+            a->setToolTip(tr("Off for this show: View ▸ Workspace ▸ Tabs & Features…"));
+        }
+        else
+            a->setToolTip(tr("Show or hide this chip on this computer. It also stays out of the way "
+                             "when there is nothing to report."));
+        const QString id = e.id;
+        connect(a, &QAction::toggled, this, [this, id](bool on) { setFooterShown(id, on); });
+    }
+    m_footerMenu->addSeparator();
+    QAction *reset = m_footerMenu->addAction(tr("Reset Footer"));
+    reset->setObjectName(QStringLiteral("footerReset"));
+    reset->setToolTip(tr("Show every chip as it ships"));
+    connect(reset, &QAction::triggered, this, &App::resetFooter);
+}
+
 void App::reloadFooterBeatOptions()
 {
     if (m_statusSpeedMasters != NULL)
@@ -9366,14 +9535,14 @@ void App::initStatusBar()
     m_statusModeLabel->setObjectName("footerReadiness");
     m_statusModeLabel->setMinimumWidth(160);
     m_statusModeLabel->installEventFilter(this);   // click → full ShowStatus details
-    sb->addWidget(m_statusModeLabel, 0);
+    addFooterChip(sb, m_statusModeLabel, QStringLiteral("readiness"));
 
     // The venue chip (board Q129, Q150): "Venue: Lincoln HS", beside the
     // readiness chip; a click opens the venue menu. Keeps itself up to date.
     if (m_doc != NULL && m_doc->programmer() != NULL)
     {
         m_venueChip = new VenueChip(m_doc, this);
-        sb->addWidget(m_venueChip, 0);
+        addFooterChip(sb, m_venueChip, QStringLiteral("venue"));
         updateVenueFooter();
     }
 
@@ -9386,7 +9555,7 @@ void App::initStatusBar()
     m_statusTeachingLabel->setProperty("helpTopic", QStringLiteral("teaching.md"));
     m_statusTeachingLabel->installEventFilter(this);
     m_statusTeachingLabel->hide();
-    sb->addWidget(m_statusTeachingLabel, 0);
+    addFooterChip(sb, m_statusTeachingLabel, QStringLiteral("teaching"));
     /* The level (Q249): STUDENT or ADVANCED, none at Standard; a click
        opens the three levels. */
     m_statusLevelLabel = new QLabel(this);
@@ -9396,7 +9565,7 @@ void App::initStatusBar()
     m_statusLevelLabel->setProperty("helpTopic", QStringLiteral("getting-started.md#levels"));
     m_statusLevelLabel->installEventFilter(this);
     m_statusLevelLabel->hide();
-    sb->addWidget(m_statusLevelLabel, 0);
+    addFooterChip(sb, m_statusLevelLabel, QStringLiteral("student"));
     updateLevelChip();
     if (m_doc != NULL)
         connect(m_doc->teachingSettings(), &TeachingSettings::teachingChanged,
@@ -9414,7 +9583,7 @@ void App::initStatusBar()
     m_statusReviewLabel->setProperty("helpTopic", QStringLiteral("show-review.md"));
     m_statusReviewLabel->installEventFilter(this);
     m_statusReviewLabel->hide();
-    sb->addWidget(m_statusReviewLabel, 0);
+    addFooterChip(sb, m_statusReviewLabel, QStringLiteral("review"));
     if (m_doc != NULL)
     {
         ShowReviewPanel::setShared(m_doc, this);
@@ -9484,7 +9653,7 @@ void App::initStatusBar()
     m_statusRigNetLabel->setProperty("helpTopic", QStringLiteral("other-improvements.md#only-transmit-on-the-rig-network"));
     m_statusRigNetLabel->installEventFilter(this);  // click → Settings, rig networks
     m_statusRigNetLabel->hide();
-    sb->addWidget(m_statusRigNetLabel, 0);
+    addFooterChip(sb, m_statusRigNetLabel, QStringLiteral("rignet"));
 
     // Show only, beside it: "Lasers held: Design". A laser, fogger or flame
     // relay kept safe is said, never silent. Hidden while nothing holds one.
@@ -9494,7 +9663,7 @@ void App::initStatusBar()
     m_statusShowOnlyLabel->setProperty("helpTopic", QStringLiteral("fixture-manager.md#output-rules"));
     m_statusShowOnlyLabel->installEventFilter(this);   // click → their Output Rules
     m_statusShowOnlyLabel->hide();
-    sb->addWidget(m_statusShowOnlyLabel, 0);
+    addFooterChip(sb, m_statusShowOnlyLabel, QStringLiteral("showonly"));
     if (m_doc != NULL && m_doc->outputRuleKeeper() != nullptr)
     {
         connect(m_doc->outputRuleKeeper(), &OutputRuleKeeper::showOnlyChanged,
@@ -9515,7 +9684,7 @@ void App::initStatusBar()
     m_statusHazardLabel->setProperty("helpTopic", QStringLiteral("fixture-manager.md#hazards-and-arming"));
     m_statusHazardLabel->installEventFilter(this);
     m_statusHazardLabel->hide();
-    sb->addWidget(m_statusHazardLabel, 0);
+    addFooterChip(sb, m_statusHazardLabel, QStringLiteral("hazard"));
     if (m_doc != NULL && m_doc->outputRuleKeeper() != nullptr)
     {
         connect(m_doc->outputRuleKeeper(), &OutputRuleKeeper::hazardsChanged, this, &App::updateHazardFooter);
@@ -9542,7 +9711,7 @@ void App::initStatusBar()
     // a show may be running -- just this, until it is clicked.
     m_statusUpdateLabel = new QLabel(this);
     m_statusUpdateLabel->hide();
-    sb->addWidget(m_statusUpdateLabel, 0);
+    addFooterChip(sb, m_statusUpdateLabel, QStringLiteral("update"));
 
     // P45, Classic QLC+ only: the Virtual Console plays Show Tree content
     // (a Cue Runner, buttons on cue lists or hits), which only the
@@ -9612,7 +9781,6 @@ void App::initStatusBar()
         QHBoxLayout *gmLayout = new QHBoxLayout(gmBox);
         gmLayout->setContentsMargins(0, 0, 4, 0);
         gmLayout->setSpacing(4);
-        gmLayout->addWidget(new QLabel(tr("GM"), gmBox));
         m_statusGrandMasterSlider = new QSlider(Qt::Horizontal, gmBox);
         m_statusGrandMasterSlider->setRange(0, 255);
         // Cap, don't fix, the width — a hard setFixedWidth() here (stacked
@@ -9643,13 +9811,13 @@ void App::initStatusBar()
         connect(m_statusGrandMasterSlider, &QSlider::valueChanged,
                 this, &App::slotFooterGrandMasterMoved);
         gmBox->setVisible(footerChipWanted(FooterGrandMaster));   // the footer's right-click, Settings ▸ Appearance
-        sb->addWidget(gmBox, 0);
+        addFooterChip(sb, gmBox, QStringLiteral("gm"));
     }
     m_statusMastersHeldLabel = new QLabel(this);
     m_statusMastersHeldLabel->setObjectName(QStringLiteral("footerMastersHeld"));
     m_statusMastersHeldLabel->setStyleSheet(QStringLiteral("QLabel { color: #b9770e; font-weight: bold; }"));
     m_statusMastersHeldLabel->hide();
-    sb->addWidget(m_statusMastersHeldLabel, 0);
+    addFooterChip(sb, m_statusMastersHeldLabel, QStringLiteral("heldmasters"));
     if (m_doc != NULL)
         connect(m_doc->speedMasters(), &SpeedMasters::changed, this, [this](int) { updateMastersHeldChip(); });
 
@@ -9659,7 +9827,7 @@ void App::initStatusBar()
     {
         m_statusSpeedMasters = new SpeedMastersFooter(m_doc, this);
         m_statusSpeedMasters->setVisible(footerChipWanted(FooterSpeedMasters));   // the footer's right-click, Settings ▸ Appearance
-        sb->addWidget(m_statusSpeedMasters, 0);
+        addFooterChip(sb, m_statusSpeedMasters, QStringLiteral("speed"));
     }
 
     // Spacer that pushes the centred health chips (MTC/Load, created below)
@@ -9692,7 +9860,7 @@ void App::initStatusBar()
     m_statusStandby->setProperty("helpTopic", QStringLiteral("show-control.md"));
     m_statusStandby->hide();
     connect(m_statusStandby, &QToolButton::clicked, this, [this]() { showContext(tr("Run")); });
-    sb->addWidget(m_statusStandby, 0);
+    addFooterChip(sb, m_statusStandby, QStringLiteral("next"));
     QTimer *standby = new QTimer(this);
     connect(standby, &QTimer::timeout, this, &App::slotUpdateStandby);
     standby->start(250);
@@ -9705,7 +9873,7 @@ void App::initStatusBar()
         "Green: rolling.\n\nClick to bind the timecode source / Follow MTC."));
     m_statusTimecodeLabel->setCursor(Qt::PointingHandCursor);
     m_statusTimecodeLabel->installEventFilter(this);   // click → bind menu
-    sb->addWidget(m_statusTimecodeLabel, 0);
+    addFooterChip(sb, m_statusTimecodeLabel, QStringLiteral("timecode"));
 
     m_statusLoadLabel = new QLabel(this);
     m_statusLoadLabel->setObjectName("footerLoad");
@@ -9718,7 +9886,7 @@ void App::initStatusBar()
     m_statusLoadLabel->setToolTip(tr("Engine tick compute time vs the per-tick "
         "budget. Amber above 60%, red at/over budget (dropped frames likely)."));
     m_statusLoadLabel->setVisible(footerChipWanted(FooterLoad));   // the footer's right-click, Settings ▸ Appearance
-    sb->addWidget(m_statusLoadLabel, 0);
+    addFooterChip(sb, m_statusLoadLabel, QStringLiteral("load"));
 
     // Estimated electrical load (Design mode) — the designed peak draw across the
     // rig's power sources/circuits. Red when a circuit or UPS is over its limit.
@@ -9730,7 +9898,7 @@ void App::initStatusBar()
     m_statusPowerLabel->setCursor(Qt::PointingHandCursor);
     m_statusPowerLabel->installEventFilter(this);   // click → circuits dialog
     m_statusPowerLabel->hide();   // shown once a Design-mode estimate arrives
-    sb->addWidget(m_statusPowerLabel, 0);
+    addFooterChip(sb, m_statusPowerLabel, QStringLiteral("power"));
 
     // Move-in-black dangle warning — a Marked (positioned-but-dark) fixture
     // that no upcoming cue is about to light, i.e. a pre-set nothing is going
@@ -9741,7 +9909,7 @@ void App::initStatusBar()
     m_statusDangleLabel->setStyleSheet(
         "QLabel { color:#000000; background:#f5a623; padding:1px 6px; border-radius:3px; }");
     m_statusDangleLabel->hide();
-    sb->addWidget(m_statusDangleLabel, 0);
+    addFooterChip(sb, m_statusDangleLabel, QStringLiteral("dangle"));
 
     // "Under timeline control" chip — visible only in Operate while a show drives
     // the rig. Green = timeline driving; amber = suspended (VC takeover). Sits
@@ -9751,7 +9919,7 @@ void App::initStatusBar()
         "is driving the rig. Amber: suspended — the Virtual Console has taken over "
         "(the playhead keeps tracking; resume to hand it back)."));
     m_statusTimelineLabel->hide();
-    sb->addWidget(m_statusTimelineLabel, 0);
+    addFooterChip(sb, m_statusTimelineLabel, QStringLiteral("timeline"));
 
     // Mirror centreSpacer on the right of the chip group: QStatusBar's own
     // built-in message-area stretch isn't a real, predictable counterpart to
@@ -9809,14 +9977,14 @@ void App::initStatusBar()
     m_statusSelectionLabel = new QLabel(this);
     m_statusSelectionLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     m_statusSelectionLabel->hide();
-    sb->addPermanentWidget(m_statusSelectionLabel);
+    addFooterChip(sb, m_statusSelectionLabel, QStringLiteral("selection"), true);
 
     // Pad-grid mode indicator. Shows "Pad: Fixture select" etc. when
     // the matrix is in any mode other than Off; hides otherwise.
     m_statusPadModeLabel = new QLabel(this);
     m_statusPadModeLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     m_statusPadModeLabel->hide();
-    sb->addPermanentWidget(m_statusPadModeLabel);
+    addFooterChip(sb, m_statusPadModeLabel, QStringLiteral("padmode"), true);
 
     /* The game controller's role while it is Run (0.4 Pad Run): what the
        Run tab's Pad: button says, seen from every tab -- the follow spot's
@@ -9827,7 +9995,7 @@ void App::initStatusBar()
     m_statusPadRoleLabel->setProperty("helpTopic", QStringLiteral("show-control.md"));
     m_statusPadRoleLabel->hide();
     m_statusPadRoleLabel->installEventFilter(this);     // a click patches a pad not patched yet
-    sb->addPermanentWidget(m_statusPadRoleLabel);
+    addFooterChip(sb, m_statusPadRoleLabel, QStringLiteral("pad"), true);
 
     // The follow spot at work, wherever you are (Show Tree, Run, Operate):
     // shown only while a follow spot is on.
@@ -9836,7 +10004,7 @@ void App::initStatusBar()
     m_statusFollowLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     m_statusFollowLabel->setProperty("helpTopic", QStringLiteral("stage-targets.md"));
     m_statusFollowLabel->hide();
-    sb->addPermanentWidget(m_statusFollowLabel);
+    addFooterChip(sb, m_statusFollowLabel, QStringLiteral("follow"), true);
 
 
     // The one override indicator (Q80): hidden unless something holds the
@@ -9847,7 +10015,7 @@ void App::initStatusBar()
     m_statusOverridesChip->setStyleSheet("QToolButton { color: #a06000; font-weight: bold; padding: 0 6px; border: none; }");
     m_statusOverridesChip->hide();
     connect(m_statusOverridesChip, &QToolButton::clicked, this, &App::clearOverrides);
-    sb->addPermanentWidget(m_statusOverridesChip);
+    addFooterChip(sb, m_statusOverridesChip, QStringLiteral("overrides"), true);
     m_overridesPoll = new QTimer(this);
     m_overridesPoll->setInterval(250);
     connect(m_overridesPoll, &QTimer::timeout, this, [this]() {
@@ -9879,7 +10047,7 @@ void App::initStatusBar()
         if (m_doc != nullptr && m_doc->testChannels() != nullptr)
             m_doc->testChannels()->setOn(false);
     });
-    sb->addPermanentWidget(m_statusTestChip);
+    addFooterChip(sb, m_statusTestChip, QStringLiteral("test"), true);
     updateTestChip();
 
     /* This computer's desk (STOP, GM, GO, Back): green, amber or red, red
@@ -9896,7 +10064,7 @@ void App::initStatusBar()
             io->showShowControlSection(QStringLiteral("surfaces"));
         }
     });
-    sb->addPermanentWidget(m_statusDeskChip);
+    addFooterChip(sb, m_statusDeskChip, QStringLiteral("desk"), true);
 
     /* A chip per patched surface with a drawn map (Q311): a click opens its
        map in Connections ▸ Control surfaces. */
@@ -9910,7 +10078,7 @@ void App::initStatusBar()
                 maps->showOnly(universe);   // this board alone, not every board stacked
         }
     });
-    sb->addPermanentWidget(m_statusSurfaceChips);
+    addFooterChip(sb, m_statusSurfaceChips, QStringLiteral("surfaces"), true, false);
 
     /* Edit Live (Q339): in Operate with a paged board, a click turns it on
        (the show's PIN if it has one); while on, red and always shown -- a
@@ -9921,33 +10089,10 @@ void App::initStatusBar()
         if (!text.isEmpty())
             statusBar()->showMessage(text, 8000);
     });
-    sb->addPermanentWidget(m_statusEditLive);
+    addFooterChip(sb, m_statusEditLive, QStringLiteral("editlive"), true);
 
-    // Persistent Design/Operate indicator — see app.h for why this is
-    // separate from the mode-toggle button (which shows the destination
-    // mode, not the current one). Always visible.
-    m_statusModeChipLabel = new QLabel(this);
-    m_statusModeChipLabel->setObjectName("footerMode");
-    m_statusModeChipLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    m_statusModeChipLabel->setCursor(Qt::PointingHandCursor);
-    m_statusModeChipLabel->setToolTip(tr("Click to switch Design/Operate mode."));
-    m_statusModeChipLabel->installEventFilter(this);   // click → toggle mode
-    sb->addPermanentWidget(m_statusModeChipLabel);
-    // Seed directly rather than calling slotModeChanged() here — that
-    // function also toggles File/New/Open and live-edit actions, which may
-    // not exist yet at this point in construction. slotModeChanged() keeps
-    // this in sync on every real mode change from here on.
-    if (m_doc != NULL && m_doc->mode() == Doc::Operate)
-    {
-        m_statusModeChipLabel->setText(tr("OPERATE"));
-        m_statusModeChipLabel->setStyleSheet("QLabel { font-weight: bold; color: #43a047; }");
-    }
-    else
-    {
-        m_statusModeChipLabel->setText(tr("DESIGN"));
-        m_statusModeChipLabel->setStyleSheet(
-            "QLabel { font-weight: bold; color: palette(text); }");
-    }
+    /* No Design/Operate chip: the Design / Operate buttons at the top right
+       say the mode (and a click there switches it). */
 
     // What lights the stage, always (the "stage chip"): a cue list running (LIVE),
     // Blind (the stage holds what it had while you edit, on the blue footer), the
@@ -9973,7 +10118,7 @@ void App::initStatusBar()
             && ShowTreeView::instance() != NULL)
             ShowTreeView::instance()->selectNode(st->previewedCue());
     });
-    sb->addPermanentWidget(m_statusStage);
+    addFooterChip(sb, m_statusStage, QStringLiteral("stage"), true);
     if (ShowTreeController *st = m_doc->showTree())
     {
         // A list starts, stops or steps; the Build look plays or lets go: all signals.
@@ -9989,7 +10134,7 @@ void App::initStatusBar()
     m_statusProgrammerLabel = new QLabel(this);
     m_statusProgrammerLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);   // its room is its widest text's
     m_statusProgrammerLabel->hide();
-    sb->addPermanentWidget(m_statusProgrammerLabel);
+    addFooterChip(sb, m_statusProgrammerLabel, QStringLiteral("programmer"), true);
 
     // Consolidated Unsaved/Autosaved/Saved indicator — was three separate
     // chips (a Saved/Unsaved toggle, plus an always-visible "Autosave:
@@ -10000,7 +10145,7 @@ void App::initStatusBar()
     // updateOutputReadiness()), not a chip here.
     m_statusDirtyLabel = new QLabel(this);
     m_statusDirtyLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);   // its room is its widest text's
-    sb->addPermanentWidget(m_statusDirtyLabel);
+    addFooterChip(sb, m_statusDirtyLabel, QStringLiteral("saved"), true);
     m_statusDirtyLabel->installEventFilter(this);       // a click lists the changes
     slotDocModified(m_doc != NULL ? m_doc->isModified() : false);
 
@@ -10011,7 +10156,7 @@ void App::initStatusBar()
         const int h = fontMetrics().height() + 4;
         const QList<QWidget *> items = { m_statusSelectionLabel, m_statusPadModeLabel, m_statusOverridesChip, m_statusTestChip,
                                          m_statusDeskChip, m_statusSurfaceChips, m_statusEditLive,
-                                         m_statusFollowLabel, m_statusModeChipLabel, m_statusStage,
+                                         m_statusFollowLabel, m_statusStage,
                                          m_statusProgrammerLabel, m_statusDirtyLabel };
         for (QWidget *w : items)
         {
@@ -10153,6 +10298,17 @@ bool App::eventFilter(QObject *watched, QEvent *event)
     {
         patchPadFromChip();
         return true;
+    }
+    // A footer chip shown or hidden by its owner: its icon follows.
+    if (event->type() == QEvent::Show || event->type() == QEvent::Hide
+        || event->type() == QEvent::ShowToParent || event->type() == QEvent::HideToParent)
+    {
+        if (FooterBadge *badge = m_footerBadgeOf.value(watched, nullptr))
+        {
+            syncFooterBadge(badge);
+            if (m_statusFitTimer != nullptr)
+                m_statusFitTimer->start();
+        }
     }
     if (m_tab != NULL && watched == m_tab && event->type() == QEvent::Resize && m_tabLabelMode == TabAuto)
         fitTabLabels();
@@ -10415,20 +10571,6 @@ bool App::eventFilter(QObject *watched, QEvent *event)
     // Click the footer Design/Operate chip → same action the toolbar
     // toggle button triggers (trigger(), not a direct slot call, so it
     // still respects the action's own enabled state).
-    /* A click in the footer never takes the show live (bench 2026-11-27: a
-       click meant for a neighbouring chip put a Design show in Operate): in
-       Design the chip says where Operate is; Operate back to Design stays. */
-    if (watched == m_statusModeChipLabel && event->type() == QEvent::MouseButtonPress
-        && m_modeToggleAction != NULL)
-    {
-        if (m_doc != NULL && m_doc->mode() == Doc::Design)
-            statusBar()->showMessage(tr("Design mode. The footer does not go live: use Control ▸ Operate (%1).")
-                                         .arg(m_modeToggleAction->shortcut().toString(QKeySequence::NativeText)), 6000);
-        else
-            m_modeToggleAction->trigger();
-        return true;
-    }
-
     if (watched == m_statusTeachingLabel && event->type() == QEvent::MouseButtonPress)
     {
         showTeachingMenu();
