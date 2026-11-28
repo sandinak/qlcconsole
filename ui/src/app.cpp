@@ -1480,6 +1480,7 @@ void App::initDoc()
             [this]() { AppUtil::updateShowEmbeddingStatus(m_doc); });
     connect(m_doc, SIGNAL(needAutosave()), this, SLOT(slotDocAutosave()));
     connect(m_doc, SIGNAL(modeChanged(Doc::Mode)), this, SLOT(slotModeChanged(Doc::Mode)));
+    connect(m_doc->operateSettings(), &ShowOperate::settingsChanged, this, &App::updateLiveEditActions);
     connect(m_doc, SIGNAL(loadProgress(QString,int)), this, SLOT(slotLoadProgress(QString,int)));
     /* Which cue each list is on while the show runs, beside the autosave:
        after a crash the Run tab offers it back as standby (crash-resume-cue). */
@@ -2622,6 +2623,24 @@ void App::slotModeDesign()
     m_doc->setMode(Doc::Design);
 }
 
+void App::updateLiveEditActions()
+{
+    /* Live Edit edits the show in Operate: not in Design, and not in a show
+       locked with a PIN (docs/features/getting-started.md, Show settings).
+       Kept from here alone, on a mode change and on a change of the lock
+       (a show loaded from web access in Operate brings its own). */
+    if (m_liveEditAction == nullptr || m_doc == nullptr)
+        return;
+    const bool locked = m_doc->operateSettings() != nullptr
+                        && m_doc->operateSettings()->locksDesign();
+    const bool on = m_doc->mode() == Doc::Operate && !locked;
+    m_liveEditAction->setEnabled(on);
+    m_liveEditVirtualConsoleAction->setEnabled(on);
+    m_captureLiveEditsAction->setEnabled(on);
+    if (!on && m_captureLiveEditsAction->isChecked())
+        m_captureLiveEditsAction->setChecked(false);
+}
+
 void App::slotModeToggleFromWeb()
 {
     /* Q204: nobody is at the console to answer Teaching's "Run this show
@@ -2674,12 +2693,7 @@ void App::slotModeChanged(Doc::Mode mode)
             m_fileTemplatesMenu->setEnabled(false);
         if (m_fileShowSettingsAction != nullptr)
             m_fileShowSettingsAction->setEnabled(false);
-        /* Live Edit edits the show in Operate: not in one locked with a PIN */
-        const bool locked = m_doc->operateSettings() != nullptr
-                            && m_doc->operateSettings()->locksDesign();
-        m_liveEditAction->setEnabled(!locked);
-        m_liveEditVirtualConsoleAction->setEnabled(!locked);
-        m_captureLiveEditsAction->setEnabled(!locked);
+        updateLiveEditActions();
 
         m_modeToggleAction->setIcon(QIcon(":/design.png"));
         m_modeToggleAction->setText(tr("Design"));
@@ -2729,11 +2743,7 @@ void App::slotModeChanged(Doc::Mode mode)
             m_controlBlindAction->setChecked(m_doc != NULL && m_doc->inputOutputMap()->outputInhibited());
             m_controlBlindAction->setToolTip(blindDesignTip());
         }
-        m_liveEditAction->setEnabled(false);
-        m_liveEditVirtualConsoleAction->setEnabled(false);
-        m_captureLiveEditsAction->setEnabled(false);
-        if (m_captureLiveEditsAction->isChecked())
-            m_captureLiveEditsAction->setChecked(false);
+        updateLiveEditActions();
 
         m_modeToggleAction->setIcon(QIcon(":/operate.png"));
         m_modeToggleAction->setText(tr("Operate"));

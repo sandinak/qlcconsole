@@ -111,6 +111,17 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
+- **Control ▸ Live Edit follows the PIN lock**: Live Edit a Function,
+  Virtual Console Live Edit and Capture Live Edits are on in Operate unless
+  the show's PIN locks Design, and now follow the lock while the show stays
+  in Operate: a locked show loaded from web access in Operate no longer
+  leaves them on (their state was set on a mode change only).
+
+- **Capture Live Edits no longer stops a Debug build**: turning it on
+  asserted in Qt (a lambda given Qt::UniqueConnection); a Release build
+  instead connected its two status messages again on every toggle, so a
+  store or an undo said so once per toggle. Member slots now.
+
 - **Control surfaces hub and the PMJ's lamps**: moving the Grand Master no
   longer sends a PMJ key the show learned (a GO, a hit, the stop on
   Favorites or a Down key) dark: the Control Map is its one lamp writer. In

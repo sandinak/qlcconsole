@@ -675,6 +675,9 @@ public:
     /** The Teaching chip, tool-tip and the title: what the show's Teaching
      *  settings say (docs/features/teaching.md). */
     void updateTeachingStatus();
+    /** Control ▸ Live Edit's actions: on in Operate unless the show's PIN
+     *  locks Design. Follows the mode and the lock. */
+    void updateLiveEditActions();
     /** The Review chip (docs/features/show-review.md): "Review · 2 ⛔ 5 ⚠"
      *  from Show Review's last run, grey "Reviewed" when nothing is open. */
     void updateReviewStatus();
