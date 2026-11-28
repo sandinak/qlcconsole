@@ -53,18 +53,40 @@ void MarkPlanner::setEnabled(bool enable)
     emit enabledChanged(enable);
 }
 
-void MarkPlanner::clearPlanned()
+void MarkPlanner::clearPlanned(bool handOver)
 {
-    for (quint32 fid : m_planned)
+    QSet<quint32> kept;
+    for (quint32 fid : std::as_const(m_planned))
         if (m_mark != nullptr && m_mark->isMarked(fid))
         {
+            if (handOver && handingOver(fid))
+            {
+                kept.insert(fid);
+                continue;
+            }
             m_mark->unmarkFixture(fid);
             putBack(fid);
         }
-    m_planned.clear();
-    m_shutterHeld.clear();
-    m_before.clear();
-    m_plannedFor.clear();
+    m_planned = kept;
+    m_shutterHeld.intersect(kept);
+    for (auto it = m_before.begin(); it != m_before.end();)
+        it = kept.contains(it.key()) ? std::next(it) : m_before.erase(it);
+    for (auto it = m_plannedFor.begin(); it != m_plannedFor.end();)
+        it = kept.contains(it.key()) ? std::next(it) : m_plannedFor.erase(it);
+}
+
+bool MarkPlanner::handingOver(quint32 fid) const
+{
+    /* GO'd into the cue it was for: that cue plays, and the fixture is lit
+       -- the mark hands it over (MarkEffect) -- once a frame with its level
+       has gone out. Until then the pre-set stays: what the cue draws on its
+       own a frame later (a WLED look's effect) is not there yet, and let go
+       of and put back, the fixture would come up in its old look for that
+       frame. A busy machine widens that gap past a re-plan (every 300 ms).
+       Never lit after all: the cue stops, and the next re-plan puts it back. */
+    const Function *forCue = m_doc != nullptr
+            ? m_doc->function(m_plannedFor.value(fid, Function::invalidId())) : nullptr;
+    return forCue != nullptr && forCue->isRunning();
 }
 
 QHash<quint32, uchar> MarkPlanner::withoutShutters(const Fixture *fxi,
@@ -137,7 +159,7 @@ QList<quint32> MarkPlanner::dangleFixtures() const
 
     QList<quint32> dangling;
     for (quint32 fid : marked)
-        if (!litSoon.contains(fid))
+        if (!litSoon.contains(fid) && !(m_planned.contains(fid) && handingOver(fid)))
             dangling << fid;
     std::sort(dangling.begin(), dangling.end());
     return dangling;
@@ -211,7 +233,7 @@ void MarkPlanner::evaluatePlan()
         CueLookahead::upcoming(m_doc, HORIZON_MS);
     if (cues.isEmpty())
     {
-        clearPlanned();      // nothing driving cues → no pre-sets
+        clearPlanned(true);  // nothing driving cues → no pre-sets (a GO into the last one hands over)
         return;
     }
     const CueLookahead::UpcomingCue cue = cues.first();
@@ -219,7 +241,7 @@ void MarkPlanner::evaluatePlan()
     // is off and the list doesn't say On): release what we pre-set.
     if (!wantsMoveInBlack(cue))
     {
-        clearPlanned();
+        clearPlanned(true);
         return;
     }
     // Too soon to move in black? Leave existing pre-sets be, add nothing new.
@@ -269,6 +291,9 @@ void MarkPlanner::evaluatePlan()
         if (master == QLCChannel::invalid() && shutters.isEmpty())
             continue;                        // nothing that can keep it dark
 
+        // Handed over to the cue it was for, which plays now: not this one's.
+        if (m_planned.contains(fid) && m_plannedFor.value(fid) != cue.functionId && handingOver(fid))
+            continue;
         // Already ours → keep it (and refresh values for the current next-cue).
         // Skip the "would move" test: the mark itself now drives the non-intensity
         // channels, so they'd read as matching and it would oscillate.
@@ -336,17 +361,24 @@ void MarkPlanner::evaluatePlan()
     // Drop the planner's marks that are no longer wanted (cue advanced / changed).
     QSet<quint32> toRelease = m_planned;
     toRelease.subtract(desired);
+    QSet<quint32> handedOver;
     for (quint32 fid : toRelease)
-        if (m_mark->isMarked(fid))
+    {
+        if (!m_mark->isMarked(fid))
+            continue;
+        if (handingOver(fid))
         {
-            m_mark->unmarkFixture(fid);
-            putBack(fid);
+            handedOver.insert(fid);
+            continue;
         }
+        m_mark->unmarkFixture(fid);
+        putBack(fid);
+    }
 
     // Apply / refresh the desired pre-sets.
     for (quint32 fid : desired)
         m_mark->markFixture(fid, holdValues.value(fid));
 
-    m_planned = desired;
+    m_planned = desired + handedOver;
     m_shutterHeld.intersect(m_planned);
 }

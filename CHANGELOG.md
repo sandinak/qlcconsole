@@ -14,6 +14,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
+- **A GO into a cue moved in black no longer flashes the old look.** If move in black re-planned in the moment between the GO and the cue's first lit frame (likelier on a busy computer), it let the pre-set go and put the fixture's old look back for that frame: a WLED came up in its old effect and was sent its whole state, and any look an effect draws showed its old values first. The pre-set now stays until the cue lights the fixture.
 - **Cue lists follow the cue on stage.** The Virtual Console cue list (and the Run tab's) now keeps the active row in sight: it moves down to the middle of the list, then the list scrolls with the cue held in the middle, and at the end blank space lets the last cue reach the middle too. Back, a click or a jump do the same; a hand on the list isn't fought.
 
 ### Added

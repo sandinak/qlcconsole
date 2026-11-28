@@ -1003,6 +1003,11 @@ void WledShow_Test::aSnapCueReachesTheStaffWithTheStage()
                 out << i;
         return out;
     };
+    auto spellLook = [&wled, starburst]() {
+        const QJsonObject seg = wled.segments().at(0).toObject();
+        return seg.value("fx").toInt() == starburst && seg.value("sx").toInt() == 200
+               && seg.value("col").toArray().at(0).toArray() == QJsonArray({ 255, 0, 0 });
+    };
     QList<qint64> ownLag, stageLag, stepsLag;
     int brightnessOnly = 0;
     for (int k = 0; k < goes; ++k)
@@ -1010,11 +1015,10 @@ void WledShow_Test::aSnapCueReachesTheStaffWithTheStage()
         const bool spell = k % 2 == 1;
         if (spell)
         {
-            // Dark, the staff is already on the spell's look (moved in black).
-            QTRY_VERIFY_WITH_TIMEOUT(!wled.state.value("on").toBool()
-                                         && wled.segments().at(0).toObject().value("fx").toInt() == starburst,
-                                     3000);
-            QTest::qWait(50);
+            /* Dark, the staff is already on the spell's look (moved in
+               black): all of it -- the burst at its speed, in red -- not a
+               time after its effect came. */
+            QTRY_VERIFY_WITH_TIMEOUT(!wled.state.value("on").toBool() && spellLook(), 3000);
         }
         const int before = statePosts().size();
         armed.store(false);
@@ -1078,7 +1082,11 @@ void WledShow_Test::aSnapCueReachesTheStaffWithTheStage()
              qPrintable(QString("the staff comes %1 ms after the steps' effect").arg(median(stepsLag))));
     QVERIFY2(median(stageLag) <= lagLimit + 40,
              qPrintable(QString("the staff comes %1 ms after the stage").arg(median(stageLag))));
-    // Moved in black: every spell GO was its brightness alone.
+    /* Moved in black: every spell GO was its brightness alone -- the pre-set
+       held until the GO's frame lit the staff, even with a re-plan in
+       between (MarkPlanner_Test::aGoKeepsThePresetUntilItsCueLightsIt: put
+       back, the staff's first frame was its old look, and its whole state
+       went with the GO; GitHub's macOS runner, 2026-11-28). */
     QCOMPARE(brightnessOnly, goes / 2);
     QCOMPARE(wled.segments().at(0).toObject().value("fx").toInt(), starburst);
     QCOMPARE(wled.state.value("on").toBool(), true);

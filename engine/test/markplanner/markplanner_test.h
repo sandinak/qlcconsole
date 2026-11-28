@@ -74,6 +74,9 @@ private slots:
     void aDarkWledIsMovedInBlackToItsNextLook();
     /** A cue jumped past: what was moved in black for it goes back. */
     void aPresetIsPutBackWhenItsCueIsJumpedPast();
+    /** A GO into the cue a fixture was moved in black for: a re-plan
+     *  before that cue's first frame lights it leaves the pre-set be. */
+    void aGoKeepsThePresetUntilItsCueLightsIt();
 
     /* A shutter is a dimmer too (2026-11-12) */
     /** "Closed" is the definition's close capabilities (a ShutterClose

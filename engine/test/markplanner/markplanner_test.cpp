@@ -1162,3 +1162,103 @@ void MarkPlanner_Test::aCueThatClosesTheShutterDoesNotLightIt()
     m_mark->unmarkFixture(sid);
     planner.setEnabled(false);
 }
+
+/* Now (A dark), next (lights A, pan 128), later (lights only B). A is moved
+   in black for next; the operator GOes into next. Next plays from this
+   frame, but A is lit -- and the mark hands it over -- only once a frame
+   with next's level has gone out. The planner re-plans on a 300 ms timer:
+   one in between sees later as the next cue, and A not in it. It must not
+   let go of A and put its old look back then: next is running, and what
+   next draws on its own a frame later (a WLED look's effect) is not there
+   yet -- A would come up in its old look for that frame. GitHub's macOS
+   runner, starved, widened that gap until the re-plan fell in it: the
+   staff's snap GO went out with the whole of its old look
+   (wledshow_test, 2026-11-28). */
+void MarkPlanner_Test::aGoKeepsThePresetUntilItsCueLightsIt()
+{
+    Scene *now = new Scene(m_doc);
+    now->setName("Now");
+    now->setValue(m_fixtureB, 1, 100);
+    m_doc->addFunction(now);
+    Scene *next = new Scene(m_doc);
+    next->setName("Next");
+    next->setValue(m_fixtureA, 1, 200);     // Dimmer
+    next->setValue(m_fixtureA, 0, 128);     // Pan
+    m_doc->addFunction(next);
+    Scene *later = new Scene(m_doc);
+    later->setName("Later");
+    later->setValue(m_fixtureB, 1, 255);
+    m_doc->addFunction(later);
+    Chaser *chaser = new Chaser(m_doc);
+    chaser->setDuration(MasterTimer::tick() * 10);
+    chaser->addStep(now->id());
+    chaser->addStep(next->id());
+    chaser->addStep(later->id());
+    m_doc->addFunction(chaser);
+
+    Universe *uni = m_doc->inputOutputMap()->universes().first();
+    uni->setChannelDefaultValue(0, 10);     // A's pan, as an earlier cue left it
+
+    MasterTimer timer(m_doc);
+    chaser->start(&timer, FunctionParent::master());
+    timer.timerTick();
+    QCOMPARE(chaser->currentStepIndex(), 0);
+
+    MarkPlanner planner(m_doc, m_mark);
+    planner.setDarkGapMs(0);
+    planner.setEnabled(true);
+    QVERIFY(m_mark->isMarked(m_fixtureA));
+    const QHash<quint32, uchar> held = m_mark->markedValues(m_fixtureA);
+    QCOMPARE(int(held.value(0)), 128);
+
+    // GO: next plays; no frame of it has reached the mark's hand-off yet.
+    ChaserAction go;
+    go.m_action = ChaserNextStep;
+    go.m_masterIntensity = 1.0;
+    go.m_stepIntensity = 1.0;
+    go.m_fadeMode = Chaser::FromFunction;
+    chaser->setAction(go);
+    for (int i = 0; i < 4 && chaser->currentStepIndex() != 1; ++i)
+        timer.timerTick();
+    QCOMPARE(chaser->currentStepIndex(), 1);
+    QVERIFY(next->isRunning());
+
+    // A re-plan now: later is next, and does not light A -- A stays as it is.
+    QMetaObject::invokeMethod(&planner, "evaluate");
+    QVERIFY(m_mark->isMarked(m_fixtureA));
+    QCOMPARE(m_mark->markedValues(m_fixtureA), held);
+    QCOMPARE(planner.plannedCount(), 1);
+
+    // Its frame goes out: the mark hands A to next, and the planner lets go.
+    handOff(m_doc, m_mark);
+    QVERIFY(!m_mark->isMarked(m_fixtureA));
+    QMetaObject::invokeMethod(&planner, "evaluate");
+    QCOMPARE(planner.plannedCount(), 0);
+    QCOMPARE(live(m_doc, 0), 128);          // next's pan, as moved in black
+    chaser->stop(FunctionParent::master());
+    for (int i = 0; i < 4; ++i)
+        timer.timerTick();
+
+    // Again, but next stops before it lights A: then A is put back.
+    chaser->start(&timer, FunctionParent::master());
+    for (int i = 0; i < 4 && chaser->currentStepIndex() != 0; ++i)
+        timer.timerTick();
+    QCOMPARE(chaser->currentStepIndex(), 0);
+    uni->setChannelDefaultValue(0, 10);     // A's pan away from next's again
+    QCOMPARE(live(m_doc, 0), 10);
+    QMetaObject::invokeMethod(&planner, "evaluate");
+    QVERIFY(m_mark->isMarked(m_fixtureA));
+    chaser->setAction(go);
+    for (int i = 0; i < 4 && chaser->currentStepIndex() != 1; ++i)
+        timer.timerTick();
+    QMetaObject::invokeMethod(&planner, "evaluate");
+    QVERIFY(m_mark->isMarked(m_fixtureA));
+    chaser->stop(FunctionParent::master());
+    for (int i = 0; i < 4; ++i)
+        timer.timerTick();
+    QVERIFY(!next->isRunning());
+    QMetaObject::invokeMethod(&planner, "evaluate");
+    QVERIFY(!m_mark->isMarked(m_fixtureA));
+    QCOMPARE(planner.plannedCount(), 0);
+    QCOMPARE(live(m_doc, 0), 10);           // as before the pre-set
+}

@@ -96,8 +96,13 @@ private:
 private:
     /** Live pre-Grand-Master value at a fixture's absolute channel (0 if off-range). */
     uchar liveValue(const class QList<class Universe*> &unis, int uni, int absAddr) const;
-    /** Drop every mark the planner owns, each put back (putBack()). */
-    void clearPlanned();
+    /** Drop every mark the planner owns, each put back (putBack()) --
+     *  but with @p handOver, one whose cue is playing (handingOver()) stays
+     *  for the mark's hand-off. */
+    void clearPlanned(bool handOver = false);
+    /** @p fid's pre-set is for a cue that is playing now: GO'd into it, the
+     *  mark hands it over once a frame lights it -- it is not let go of. */
+    bool handingOver(quint32 fid) const;
     /** A pre-set let go of before its cue lit the fixture -- the cue was
      *  jumped past, or it is no longer moved in black into: its channels go
      *  back to what they were before the pre-set, so a later cue that sets
