@@ -17,6 +17,7 @@
   limitations under the License.
 */
 
+#include <QScopeGuard>
 #include <QAbstractEventDispatcher>
 #include <QApplication>
 #include <QElapsedTimer>
@@ -890,6 +891,13 @@ void VirtualBench_Test::theLpd8Mk2PadsReachTheirJobs()
     InputOutputMap *iom = m_app->doc()->inputOutputMap();
     DeskRecord *desk = m_app->doc()->deskRecord();
     SurfaceAutoPatch *ap = m_app->doc()->surfaceSetup()->autoPatch();
+    /* The Grand Master's pick-up ignores everything for 500 ms after a re-arm
+       (a device's dump). On a loaded host the knob's values could land inside
+       that window by wall time, so the desk runs on a clock the test steps:
+       the window is over exactly when the test says so. */
+    qint64 deskNow = 1000;
+    desk->setClock([&deskNow]() { return deskNow; });
+    const auto restoreClock = qScopeGuard([desk]() { desk->setClock(nullptr); });
     QSignalSpy patched(ap, &SurfaceAutoPatch::autoPatched);
     VirtualMidiPort *lpd = m_bench->plug(kLpd8Mk2);
     QTRY_COMPARE_WITH_TIMEOUT(patched.count(), 1, 5000);
@@ -898,7 +906,8 @@ void VirtualBench_Test::theLpd8Mk2PadsReachTheirJobs()
                                  && desk->isLive(DeskRecord::GrandMaster), 2000);
     for (DeskRecord::Role r : { DeskRecord::Go, DeskRecord::Back, DeskRecord::Stop, DeskRecord::GrandMaster })
         QCOMPARE(desk->universeOf(r), u);
-    settle(1000);       // past the plug's dump window
+    settle(100);
+    deskNow += 1000;    // past the plug's dump window
     QSignalSpy fired(desk, &DeskRecord::fired);
     QSignalSpy refused(desk, &DeskRecord::refused);
     auto pad = [this, lpd](int n, bool down) {
@@ -935,6 +944,7 @@ void VirtualBench_Test::theLpd8Mk2PadsReachTheirJobs()
     QCOMPARE(fired.first().first().toString(), QStringLiteral("ALL OFF"));
     QTRY_VERIFY_WITH_TIMEOUT(m_app->doc()->outputRuleKeeper()->emergencyStopped(), 2000);
     // K1 (CC 70, channel 1): the Grand Master, picked up at the master and then followed.
+    deskNow += 1000;    // and past any re-arm since (the e-stop, the patch settling)
     iom->setGrandMasterValue(255);
     for (int v : { 120, 124, 127, 110, 90, 64 })
     {

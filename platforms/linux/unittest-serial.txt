@@ -79,3 +79,9 @@ ui/test/firespreadperf
 # Overview's and the plot's frames, the UI thread's longest stall and
 # load/save to wall-clock budgets.
 ui/test/showscale
+
+# aRealRigAndWhatItCosts holds the Rig Overview's light-map overlay to 5 ms a
+# frame (QElapsedTimer around real grabs). It measured 11.8-15.8 ms on a
+# loaded host (train/053t strict runs) and 1-2 ms alone, so the budget stays
+# and the test runs with the machine to itself.
+ui/test/lightmapview
