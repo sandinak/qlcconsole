@@ -41,6 +41,7 @@ private slots:
 
     /* One test per check: a tiny show that trips it, and the near miss
        that must not (docs/design/SHOW_REVIEW.md section 6). */
+    void howToFixCoversEveryCheck();
     void pat01();
     void pat02();
     void pat03();

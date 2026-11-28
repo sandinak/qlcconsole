@@ -273,6 +273,99 @@ void ShowReviewPanel_Test::filters()
     QVERIFY(rowOf(panel.tree(), "PAT-01") != nullptr);
 }
 
+void ShowReviewPanel_Test::howToFixShownUnderTheFinding()
+{
+    ShowReviewPanel panel(m_doc);
+    panel.recheck();
+    QTreeWidgetItem *row = rowOf(panel.tree(), "PAT-01");
+    QVERIFY(row != nullptr);
+    QVERIFY2(row->text(1).contains("How to fix:"), qPrintable(row->text(1)));
+    QVERIFY(row->text(1).contains("free address"));
+    // The fix is on the row: a button labelled by its kind.
+    QPushButton *b = panel.rowButton(panel.selectedFindings().isEmpty()
+                                         ? m_doc->showReview()->lastResult().findings.first().key() : QString());
+    Q_UNUSED(b);
+    QWidget *w = panel.tree()->itemWidget(row, 2);
+    QVERIFY(w != nullptr);
+    QCOMPARE(qobject_cast<QPushButton *>(w)->text(), QStringLiteral("Fix"));
+    QTreeWidgetItem *dup = rowOf(panel.tree(), "FIX-14");
+    QCOMPARE(qobject_cast<QPushButton *>(panel.tree()->itemWidget(dup, 2))->text(), QStringLiteral("Go There"));
+}
+
+/* PAT-01: the later fixture moves to the first free fit; one undo step. */
+void ShowReviewPanel_Test::oneClickFixResolvesAndUndoes()
+{
+    ShowReviewPanel panel(m_doc);
+    panel.recheck();
+    QVERIFY(panel.selectCheck("PAT-01"));
+    QCOMPARE(panel.selectedFindings().first().fixKind, ReviewFinding::OneClick);
+    QCOMPARE(panel.fixButton()->text(), QStringLiteral("Fix"));
+    panel.fixButton()->click();
+    QVERIFY2(panel.said().contains("Moved"), qPrintable(panel.said()));
+    QVERIFY(rowOf(panel.tree(), "PAT-01") == nullptr);
+    QVERIFY(panel.summary()->text().contains("Moved"));
+    QVERIFY(panel.undoLast());
+    QVERIFY(rowOf(panel.tree(), "PAT-01") != nullptr);
+}
+
+void ShowReviewPanel_Test::oneClickWaitsForDesignInOperate()
+{
+    m_doc->setMode(Doc::Operate);
+    ShowReviewPanel panel(m_doc);
+    panel.recheck();
+    QVERIFY(panel.selectCheck("PAT-01"));
+    panel.fixButton()->click();
+    QVERIFY2(panel.said().contains("Design"), qPrintable(panel.said()));
+    QVERIFY(rowOf(panel.tree(), "PAT-01") != nullptr);
+    m_doc->setMode(Doc::Design);
+}
+
+void ShowReviewPanel_Test::goThereSelectsAndRowMenuOffersTheFix()
+{
+    QString jumped;
+    ShowReviewPanel::setJumper([&jumped](QWidget *, const QString &jump, const QVariantList &) {
+        jumped = jump;
+        return true;
+    });
+    Fixture *u = dimmer(m_doc, "Spare", 100);
+    QVERIFY(m_doc->unpatchFixture(u->id()));
+    ShowReviewPanel panel(m_doc);
+    panel.recheck();
+    QTreeWidgetItem *row = rowOf(panel.tree(), "PAT-03");
+    QVERIFY(row != nullptr);
+    QPushButton *b = qobject_cast<QPushButton *>(panel.tree()->itemWidget(row, 2));
+    QVERIFY(b != nullptr);
+    QCOMPARE(b->text(), QStringLiteral("Go There"));
+    b->click();
+    QTRY_VERIFY(!jumped.isEmpty());                 // the row was selected, then its jump ran
+    QCOMPARE(panel.selectedFindings().count(), 1);
+    QCOMPARE(panel.selectedFindings().first().check, QStringLiteral("PAT-03"));
+    // The right-click menu: the fix, How to Fix, Copy, and the answers.
+    QMenu *menu = panel.buildRowMenu(&panel);
+    QVERIFY(menu->findChild<QAction *>("reviewRowFix") != nullptr);
+    QCOMPARE(menu->findChild<QAction *>("reviewRowFix")->text(), QStringLiteral("Go There"));
+    QVERIFY(menu->findChild<QAction *>("reviewRowHow") != nullptr);
+    QVERIFY(menu->findChild<QAction *>("reviewRowCopy") != nullptr);
+    delete menu;
+    ShowReviewPanel::setJumper(ShowReviewPanel::Jumper());
+}
+
+/* Fix All Safe fixes the one-click findings, one undo step; Go There and
+   manual rows stay open. */
+void ShowReviewPanel_Test::fixAllSafeSkipsTheRest()
+{
+    ShowReviewPanel panel(m_doc);
+    panel.recheck();
+    QCOMPARE(panel.safeCount(), 1);
+    QVERIFY(!panel.fixAllButton()->isHidden() || !panel.isVisible());
+    QCOMPARE(panel.fixAllSafe(), 1);
+    QVERIFY(rowOf(panel.tree(), "PAT-01") == nullptr);
+    QVERIFY(rowOf(panel.tree(), "FIX-14") != nullptr);      // a Go There row: left alone
+    QCOMPARE(panel.safeCount(), 0);
+    QVERIFY(panel.undoLast());
+    QVERIFY(rowOf(panel.tree(), "PAT-01") != nullptr);
+}
+
 void ShowReviewPanel_Test::fixGoesToThePlace()
 {
     QStringList ran;
@@ -292,7 +385,10 @@ void ShowReviewPanel_Test::fixGoesToThePlace()
 
     // A place that is gone (wfaudit 2026-11-03): Fix ▸ says so, never nothing.
     ShowReviewPanel::setJumper([](QWidget *, const QString &, const QVariantList &) { return false; });
-    QVERIFY(panel.selectCheck("PAT-01"));
+    Fixture *spare = dimmer(m_doc, "Spare", 100);
+    QVERIFY(m_doc->unpatchFixture(spare->id()));
+    panel.recheck();
+    QVERIFY(panel.selectCheck("PAT-03"));
     QVERIFY(!panel.fixSelected());
     panel.fixButton()->click();
     QVERIFY2(panel.summary()->text().contains("Couldn't go there"), qPrintable(panel.summary()->text()));
@@ -317,10 +413,12 @@ void ShowReviewPanel_Test::fixSeveralAtOnce()
         ++visits;
         return true;
     });
+    Fixture *spare = dimmer(m_doc, "Spare", 100);
+    QVERIFY(m_doc->unpatchFixture(spare->id()));
     ShowReviewPanel panel(m_doc);
     panel.recheck();
     panel.tree()->clearSelection();
-    for (const char *check : { "FIX-14", "FIX-03", "PAT-01" })
+    for (const char *check : { "FIX-14", "FIX-03", "PAT-03" })
     {
         QTreeWidgetItem *row = rowOf(panel.tree(), check);
         QVERIFY2(row != nullptr, check);
@@ -511,7 +609,7 @@ void ShowReviewPanel_Test::iMeantItFromTheRow()
     panel.tree()->clearSelection();
     row->setSelected(true);
     QCOMPARE(panel.acceptButton()->text(), QStringLiteral("Not a Problem…"));
-    QCOMPARE(panel.fixButton()->text(), QStringLiteral("Fix ▸"));
+    QCOMPARE(panel.fixButton()->text(), QStringLiteral("Fix"));      // PAT-01 is a one-click fix
 }
 
 void ShowReviewPanel_Test::showTreeMarksBreachingCues()
@@ -852,6 +950,40 @@ void ShowReviewPanel_Test::threeStatesEverywhere()
 /* Pictures of the three states (Q207), only when QLC_WARN_SHOTS names a
    folder: the cue rows, the hover, the right-click menus and the Review
    panel, dark theme, at the widgets' minimum, 1280x800 and 1920x1080. */
+/* The panel with a show that has findings of every kind (QLC_SHOT_DIR, set
+   by check-all --shots): the how-to line, the Fix / Go There buttons and the
+   right-click menu, at three sizes. */
+void ShowReviewPanel_Test::fixShots()
+{
+    const QString dir = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (dir.isEmpty())
+        QSKIP("QLC_SHOT_DIR not set");
+    QDir().mkpath(dir);
+    const QPalette was = qApp->palette();
+    qApp->setPalette(App::themePalette(App::ThemeVSCodeDark, was));
+    Fixture *spare = dimmer(m_doc, "Spot 3", 200);
+    m_doc->unpatchFixture(spare->id());
+    Fixture *past = dimmer(m_doc, "Wash 9", 300);
+    past->setAddress(512);
+    ShowReviewPanel panel(m_doc);
+    panel.setFilter(ShowReviewPanel::All);
+    panel.recheck();
+    const QList<QPair<QString, QSize>> sizes {
+        { "min", QSize(520, 360) }, { "1280x800", QSize(1280, 800) }, { "1920x1080", QSize(1920, 1080) } };
+    for (const auto &sz : sizes)
+    {
+        panel.resize(sz.second);
+        panel.show();
+        QApplication::processEvents();
+        panel.grab().save(QStringLiteral("%1/review-fix-%2.png").arg(dir, sz.first));
+    }
+    panel.selectCheck("PAT-01");
+    QMenu *menu = panel.buildRowMenu(&panel);
+    menu->grab().save(QStringLiteral("%1/review-fix-menu.png").arg(dir));
+    delete menu;
+    qApp->setPalette(was);
+}
+
 void ShowReviewPanel_Test::screenshots()
 {
     const QString dir = qEnvironmentVariable("QLC_WARN_SHOTS");

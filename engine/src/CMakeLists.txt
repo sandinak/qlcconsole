@@ -43,7 +43,7 @@ add_library(${module_name} SHARED
     encoderattributes.cpp encoderattributes.h
     showoperate.cpp showoperate.h
     teachingsettings.cpp teachingsettings.h
-    showreview.cpp showreview.h showreviewcontext.h
+    showreview.cpp showreview.h showreviewcontext.h showreviewfixes.cpp
     showreviewchecks.cpp showreviewcuechecks.cpp showreviewmovechecks.cpp showreviewzonechecks.cpp
     showreviewvcchecks.cpp showreviewvenuechecks.cpp showreviewblockingchecks.cpp
     placementcheck.cpp placementcheck.h

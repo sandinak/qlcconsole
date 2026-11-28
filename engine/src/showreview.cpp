@@ -205,6 +205,7 @@ ShowReview::Result ShowReview::run(const Options &options)
         {
             std::sort(f.targets.begin(), f.targets.end());
             applyAcceptance(f);
+            annotate(m_doc, f);
             r.findings << f;
         }
     }

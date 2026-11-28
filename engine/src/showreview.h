@@ -56,6 +56,10 @@ struct QLC_ENGINE_EXPORT ReviewFinding
 {
     enum Severity { Note = 0, Warning = 1, Blocker = 2 };
     enum State { Open, Accepted, Changed };
+    /** What the Review panel's button for a finding does: Fix (one click,
+     *  safe and unambiguous, one undo step), Go There (opens the place) or
+     *  Manual (says why it can't be automatic). */
+    enum FixKind { Manual = 0, GoThere = 1, OneClick = 2 };
 
     QString check;              //!< "PAT-01"
     Severity severity = Warning;
@@ -69,6 +73,10 @@ struct QLC_ENGINE_EXPORT ReviewFinding
     /** A suggested cut of tape that clears the finding (PWR-11): pairs of
      *  fixture id and more degrees on the bottom of its beam or window. */
     QVariantList fixMask;
+
+    /** How to fix it, in crew words (filled by ShowReview::run()). */
+    QString howToFix;
+    FixKind fixKind = Manual;
 
     State state = Open;
     QString acceptedBy;         //!< Accepted / Changed: who, when and why
@@ -164,6 +172,15 @@ public:
     };
 
     explicit ShowReview(Doc *doc);
+
+    /** How to fix @a finding (never empty for a catalogued check), what
+     *  kind of fix it is, whether a one-click fix applies, and both filled
+     *  into @a finding. One table per check: showreviewfixes.cpp. */
+    static bool hasHowToFix(const QString &checkId);
+    static QString howToFix(const ReviewFinding &finding, Doc *doc);
+    static ReviewFinding::FixKind fixKind(const ReviewFinding &finding);
+    static bool oneClickApplies(const ReviewFinding &finding);
+    static void annotate(Doc *doc, ReviewFinding &finding);
 
     /** Run the checks; the result is also kept (lastResult()) and
      *  reviewed() emitted. */

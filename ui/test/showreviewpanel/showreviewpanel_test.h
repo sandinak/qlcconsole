@@ -58,7 +58,13 @@ private slots:
     void showTreeMarksBreachingCues();
     void warningMarksShareDetailAndAnswers();
     void threeStatesEverywhere();
+    void howToFixShownUnderTheFinding();
+    void oneClickFixResolvesAndUndoes();
+    void oneClickWaitsForDesignInOperate();
+    void goThereSelectsAndRowMenuOffersTheFix();
+    void fixAllSafeSkipsTheRest();
     void screenshots();
+    void fixShots();
     void onlyTheWarningBadgeIsColoured();
     void propsKeepTheirOwnColourOnTheRig();
 

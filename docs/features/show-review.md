@@ -89,6 +89,23 @@ show's own names. Hover a row for **why it matters**. Show **Open**,
 **Not a Problem** or **All**, and type in **Search** to narrow the list.
 **Re-check** runs every check again.
 
+- **How to fix**: every finding has a line under it saying what to do, in
+  crew words and about that finding ("Patch 'Spot 3' to a free address").
+  Next to it is a button named for what it does:
+  - **Fix**: one click, safe and unambiguous. Today that is **PAT-01** and
+    **PAT-02**: the later fixture moves to the first free address that fits
+    (the venue's kept channels respected). It is one undo step (⌘Z on the
+    Fixtures tab), and the line under the list says what it did. In
+    Operate the patch is locked: press **Design** (the PIN, if the show
+    has one), then Fix.
+  - **Go There**: opens the place, with the item selected. The change is
+    yours. Every safety finding (hazards FIX-22..24, lasers, the
+    emergency stop) is Go There at most, never one click.
+  - Nothing on the row: it is done by hand (the how-to line says why).
+  **Fix All Safe (N)** does every one-click finding in view as one undo step;
+  it never touches Go There or by-hand rows.
+- **Right-click** a row: **Fix** or **Go There**, **How to Fix…**, **Copy**,
+  then Not a Problem… / Reopen as before.
 - **Fix ▸** (or double-click) goes to the place to fix it: the cue in the
   Show Tree, the function, the Patch dialog on the fixtures, Connections on
   the universe, the Lighting Studio. If that place has changed or gone
