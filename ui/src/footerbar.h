@@ -49,6 +49,11 @@ public:
     /** The label the message is shown in (hidden while there is none). */
     QLabel *messageLabel() const { return m_label; }
 
+    /** No width of its own: the chips are fitted to the window (App::
+     *  fitStatusBar() squeezes what does not fit), so the bar never holds
+     *  the window wider than it is (viewlayout: 1073 px in a 900 px window). */
+    QSize minimumSizeHint() const override;
+
 protected:
     void paintEvent(QPaintEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;

@@ -80,6 +80,11 @@ void FooterBar::place()
     m_label->raise();
 }
 
+QSize FooterBar::minimumSizeHint() const
+{
+    return QSize(0, QStatusBar::minimumSizeHint().height());
+}
+
 void FooterBar::paintEvent(QPaintEvent *event)
 {
     Q_UNUSED(event)
