@@ -27,6 +27,7 @@
 #include <QMenu>
 #include <QDir>
 #include <QtTest>
+#include <QSignalSpy>
 
 #include "../../../engine/test/common/stdprelude.h"
 #define private public
@@ -284,7 +285,15 @@ void EditLiveUi_Test::aStudentShowNeverReachesIt()
     settle();
     QToolButton *b = run.editLiveButton();
     QVERIFY(!b->isEnabled());
-    QVERIFY(!chip.chip()->isEnabled());
+    // The chip greys itself but takes a click (build 4910): the click
+    // offers the Switch and never turns it on.
+    QVERIFY(chip.chip()->text().contains(QStringLiteral("Standard")));
+    {
+        QSignalSpy offered(level, &ShowLevel::switchOffered);
+        chip.chip()->click();
+        QCOMPARE(offered.count(), 1);
+        QVERIFY(!el->isOn());
+    }
     QVERIFY2(b->toolTip().contains(QStringLiteral("Standard")), qPrintable(b->toolTip()));
     QVERIFY2(chip.chip()->toolTip().contains(QStringLiteral("Standard")), qPrintable(chip.chip()->toolTip()));
     QString why;

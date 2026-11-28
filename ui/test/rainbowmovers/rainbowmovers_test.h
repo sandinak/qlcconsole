@@ -51,6 +51,8 @@ private:
     void check(const QString &path);
     /** The cue-list's XML Output: Art-Net to the probe, never 0:0:0. */
     void checkOutputXml(const QString &path);
+    /** Every fixture on the plot: the front pipe, the targets, the aims. */
+    void checkPlot();
     /** The Rainbow on the three fixtures, sampled on a fixed clock. */
     void checkEffect();
 

@@ -48,6 +48,7 @@
 #include "doc.h"
 
 #include "rainbowmovers_test.h"
+#include "plotplacement.h"
 
 using namespace ShowTree;
 
@@ -62,6 +63,7 @@ const QString kCmy = QStringLiteral("CMY Mover");
 const QString kWheel = QStringLiteral("Wheel Mover");
 const QString kRgb = QStringLiteral("RGB Par");
 const QString kUniverse = QStringLiteral("U01-Rainbow-Probe");
+const QString kPipe = QStringLiteral("FOH Pipe");
 
 /* The OLA probe (the Pi on the show VLAN): Art-Net 0:0:15, unicast. Never
    0:0:0, which is the office rig's. */
@@ -195,6 +197,24 @@ void RainbowMovers_Test::build(const QString &path)
     InputOutputMap *iom = doc->inputOutputMap();
     iom->setUniverseName(0, kUniverse);
 
+    /* ---- the plot: all three on one pipe across the front at 16' trim, 6'
+       apart (CMY stage right, the wheel centre, the par stage left), aimed
+       at three targets downstage centre, 4' apart. */
+    MonitorProperties *mp = doc->monitorProperties();
+    using namespace PlotPlacement;
+    Pipe *pipe = addFrontPipe(mp, kPipe, 14.0f * kFoot, 16.0f * kFoot, 3.0f * kFoot);
+    const QList<StageTarget *> targets = {
+        addTarget(mp, QStringLiteral("DSR"), -4.0f * kFoot, 5.0f * kFoot),
+        addTarget(mp, QStringLiteral("DSC"), 0.0f, 5.0f * kFoot),
+        addTarget(mp, QStringLiteral("DSL"), 4.0f * kFoot, 5.0f * kFoot),
+    };
+    for (StageTarget *t : targets)
+        t->setLayerId(mp->placementLayerId());
+    for (int i = 0; i < rig.size(); ++i)
+        hang(mp, fixtureNamed(doc, rig.at(i).name), pipe, (1.0f + 6.0f * i) * kFoot);
+    Fixture *parFixture = fixtureNamed(doc, kRgb);
+    pointFixedAt(mp, parFixture, targets.at(2));
+
     // ---- palettes
     auto palette = [&](QLCPalette::PaletteType type, const QString &name) {
         QLCPalette *p = new QLCPalette(type, doc);
@@ -221,6 +241,18 @@ void RainbowMovers_Test::build(const QString &path)
         Look l = st->lookForPalette(p->id());
         QVERIFY2(st->setLayerLook(cue, layer, l), qPrintable(p->name()));
     };
+    // The movers aim with an Aim look each (their own target); the par is pointed (above).
+    QList<QPair<Target, QLCPalette *>> aims;
+    for (int i = 0; i < 2; ++i)
+    {
+        QLCPalette *a = new QLCPalette(QLCPalette::Aim, doc);
+        a->setName(QStringLiteral("Aim %1").arg(targets.at(i)->name()));
+        a->setStageTargetId(targets.at(i)->id());
+        doc->addPalette(a);
+        Target one;
+        one.fixtures << fixtureNamed(doc, rig.at(i).name)->id();
+        aims << qMakePair(one, a);
+    }
     const quint32 prod = st->addProduction(kProduction);
     const quint32 list = st->addCueList(prod, kList, ListMode::NonTracking);
     QVERIFY(st->setMainList(list));
@@ -236,6 +268,9 @@ void RainbowMovers_Test::build(const QString &path)
         const quint32 l = st->addLayer(off, all);
         look(off, l, dark);
     }
+    for (quint32 cue : { on, off })      // a non-tracking list: aimed in both
+        for (const auto &aim : aims)
+            look(cue, st->addLayer(cue, aim.first), aim.second);
     if (QTest::currentTestFailed())
         return;
 
@@ -334,10 +369,55 @@ void RainbowMovers_Test::check(const QString &path)
     };
     QVERIFY(effectIn(list->cues.at(0)));
     QVERIFY(!effectIn(list->cues.at(1)));
-    QCOMPARE(list->cues.at(0).layers.count(), 1);
+    // One layer for all three, and an Aim layer for each mover.
+    QCOMPARE(list->cues.at(0).layers.count(), 3);
     QCOMPARE(list->cues.at(0).layers.first().target.fixtures.count(), 3);
 
+    checkPlot();
+
     checkEffect();
+}
+
+/* Every fixture on the plot (Branson: all three were under "Not on the
+   plot" in the Lighting Studio): on the front pipe at 16', 6' apart, the
+   movers aimed at their targets, the par pointed down at its own. */
+void RainbowMovers_Test::checkPlot()
+{
+    Doc *doc = m_app->doc();
+    MonitorProperties *mp = doc->monitorProperties();
+    const QList<quint32> placed = mp->fixtureItemsID();
+    for (Fixture *fx : doc->fixtures())
+        QVERIFY2(placed.contains(fx->id()), qPrintable(fx->name() + " is not on the plot"));
+    QCOMPARE(mp->pipes().count(), 1);
+    const Pipe *pipe = mp->pipes().first();
+    QCOMPARE(pipe->name(), kPipe);
+    QVERIFY(!pipe->isVertical());
+    QVERIFY(!pipe->hasStand());              // hung, not on a stand
+    QVERIFY(qAbs(pipe->baseZ() - 16.0f * PlotPlacement::kFoot) < 0.01f);
+    QList<float> xs;
+    for (const QString &name : { kCmy, kWheel, kRgb })
+    {
+        Fixture *fx = fixtureNamed(doc, name);
+        QVERIFY(fx != nullptr);
+        const FixtureRigProps rp = mp->fixtureRigProps(fx->id());
+        QVERIFY2(rp.pipeId == pipe->id(), qPrintable(name + " is not on the pipe"));
+        xs << mp->fixtureRigPosition(fx->id()).x();
+        // On the placement layer: Top and Rig Overview draw it.
+        QVERIFY2(mp->layer(mp->fixtureLayer(fx->id())).visible, qPrintable(name));
+    }
+    QVERIFY(qAbs((xs.at(1) - xs.at(0)) - 6.0f * PlotPlacement::kFoot) < 0.01f);
+    QVERIFY(qAbs((xs.at(2) - xs.at(1)) - 6.0f * PlotPlacement::kFoot) < 0.01f);
+    QCOMPARE(mp->stageTargets().count(), 3);
+    for (StageTarget *t : mp->stageTargets())
+        QVERIFY2(t->position().y() < mp->downstageEdgeY(), qPrintable(t->name()));
+    for (const char *aim : { "Aim DSR", "Aim DSC" })
+    {
+        QLCPalette *p = paletteNamed(doc, QLatin1String(aim));
+        QVERIFY2(p != nullptr && mp->stageTarget(p->stageTargetId()) != nullptr, aim);
+    }
+    const FixtureRigProps par = mp->fixtureRigProps(fixtureNamed(doc, kRgb)->id());
+    QVERIFY(par.fixedAim);
+    QVERIFY2(par.aimDown > 30.0f && par.aimDown < 90.0f, qPrintable(QString::number(par.aimDown)));
 }
 
 void RainbowMovers_Test::checkEffect()
