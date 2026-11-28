@@ -130,7 +130,16 @@ from the Library lands in the tree right beside it.
     sections, its **Timecode** row ([Song sections on the
     timecode](#song-sections-on-the-timecode)), **Convert to
     tracking…** and **Detach to Plain Chaser…**.
-  - **A cue** shows its number, name, note, **Text colour**, mode, base
+  - **A cue**'s page is in four tabs under its header: **Edit** (number,
+    name, **Text colour**, layers, cue looks), **Tracking** (mode, base,
+    mix, includes, blocking, **Tracked in**, *Next cue receives*),
+    **Timing** (fades, hold, sub-cues, **At timecode**, skip, **Fast**) and
+    **Notes** (the note, **Needs work**, venue focus, **Focus This
+    Cue…**), the same here as in the Workbench
+    ([Working on a cue in the Workbench](#working-on-a-cue-in-the-workbench)).
+    The tab you pick stays picked as you click from cue to cue; a new cue
+    opens on **Edit**, ready for its name.
+    It shows its number, name, note, **Text colour**, mode, base
     check box, **Overlapping layers mix**, **Skip**, **Don't move in black
     into this cue**, **At timecode** with **Learn** (the time a list that
     follows timecode plays it; [Cues at a timecode](shows.md#cues-at-a-timecode)),
@@ -213,8 +222,7 @@ the tree and the Workbench follows it.
     is three layers carried in; **Timing ●** has a timecode; **Notes ●** has
     a note or a mark. The tab you were on is kept while the app is open, and
     a tab with nothing to show (a hit has no tracking) is left out. The
-    tree's own page, beside the Library, still shows everything in one
-    scroll;
+    tree's own page, beside the Library, has the same tabs;
   - a layer: its page as the tree has it — every attribute with **✎** and
     **⋯**, Release, Make reusable, a line aim's strip;
   - a value: its palette in the **Look Editor**, at full height. It says

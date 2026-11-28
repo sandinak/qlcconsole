@@ -19,6 +19,7 @@
 
 #include <QStringList>
 #include <algorithm>
+#include <climits>
 #include <QHash>
 #include <QMap>
 
@@ -34,6 +35,8 @@
 #include "encoderbank.h"
 #include "pmjoverlay.h"
 #include "inputpatch.h"
+#include "qlcinputprofile.h"
+#include "qlcinputchannel.h"
 #include "programmercontroller.h"
 #include "keytriggers.h"
 #include "padrun.h"
@@ -526,6 +529,47 @@ QString ControlOwners::refusal(Doc *doc, quint32 universe, quint32 channel, cons
         }
     }
     return text;
+}
+
+quint32 ControlOwners::firstFreeButton(Doc *doc, quint32 universe, quint32 besides)
+{
+    if (doc == nullptr || universe == ControlMap::KeyboardUniverse)
+        return UINT_MAX;
+    InputPatch *ip = doc->inputOutputMap()->inputPatch(universe);
+    QLCInputProfile *profile = ip != nullptr ? ip->profile() : nullptr;
+    if (profile == nullptr)
+        return UINT_MAX;
+    const quint32 page = besides & 0xFFFF0000;
+    QList<quint32> buttons;
+    const QMap<quint32, QLCInputChannel *> chans = profile->channels();
+    for (auto it = chans.cbegin(); it != chans.cend(); ++it)
+        if (it.value() != nullptr && it.value()->type() == QLCInputChannel::Button
+            && (it.key() | page) != besides)
+            buttons << (it.key() | page);
+    if (buttons.isEmpty())
+        return UINT_MAX;
+    const QHash<quint32, QList<Owner>> taken = ownersOn(doc, universe, buttons);
+    for (quint32 ch : buttons)
+        if (taken.value(ch).isEmpty())
+            return ch;
+    return UINT_MAX;
+}
+
+QString ControlOwners::recommendedFix(Doc *doc, quint32 universe, quint32 freeChannel, const QList<Owner> &owners)
+{
+    if (owners.isEmpty())
+        return QString();
+    const bool movable = canMove(owners);
+    const QString from = owners.first().thing;
+    if (freeChannel != UINT_MAX)
+    {
+        const QString use = tr("Recommended: use another control, a free one on this board: %1.")
+                                .arg(controlName(doc, universe, freeChannel));
+        return movable ? use + QStringLiteral(" ") + tr("Or Move It Here to take it from %1.").arg(from) : use;
+    }
+    if (movable)
+        return tr("Recommended: Move It Here to take it from %1, or press a control with no job.").arg(from);
+    return tr("Recommended: press a control with no job (this board has no free button left).");
 }
 
 QString ControlOwners::runRefusal(Doc *doc, quint32 universe, const QList<QPair<quint32, Owner>> &taken)

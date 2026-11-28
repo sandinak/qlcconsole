@@ -71,6 +71,7 @@ private slots:
     void aPmjControlIsRefusedWithNoMoveItHere();
     void theEncoderLearnRefusesAndMoves();
     void theInputPickersRefuseAndMove();
+    void aRefusalSaysTheFixAndOffersAFreeButton();
     void aMoveInAPropertiesWindowWaitsForOk();
     void theStopIsNeverTakenButCanTake();
     void theHubListsControlsWithTwoJobs();

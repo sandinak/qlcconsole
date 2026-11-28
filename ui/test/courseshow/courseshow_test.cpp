@@ -143,6 +143,7 @@
 #include "patchlabels.h"
 
 #include "courseshow_test.h"
+#include "../common/cuetabs.h"
 #include "../common/dragpos.h"
 
 using namespace ShowTree;
@@ -5208,6 +5209,7 @@ static bool lessonTwoSevenByMouse(Doc *doc, ShowTreeView *view, const QString &s
     LESSON_STEP(view->selectNode(cueNumbered(doc, "1.0.2")), "select 1.0.2");
     settle(50);
     QLabel *subs = stFind<QLabel>(view, "stCueSubCues");
+    LESSON_STEP(clickCueTabOf(view, subs), "no Timing tab");
     LESSON_STEP(subs != nullptr && subs->isVisible(), "no Sub-cues row");
     qInfo().noquote() << "[2.7] Sub-cues row:" << subs->text();
     emit subs->linkActivated(QStringLiteral("new"));
@@ -5315,6 +5317,7 @@ void CourseShow_Test::lessonTwoOneExtension()
     QVERIFY(view->selectNode(cueNumbered(doc, "1.0.0")));
     settle(50);
     QCheckBox *base = stFind<QCheckBox>(view, "stCueBase");
+    QVERIFY(clickCueTabOf(view, base));
     QVERIFY(base != nullptr && base->isVisible() && !base->isChecked());
     qInfo().noquote() << "[2.1x] base box:" << base->text();
     base->click();
@@ -6008,6 +6011,7 @@ static bool lessonThreeFiveByMouse(Doc *doc, ShowTreeView *view, const QString &
         const quint32 id = cueNumbered(doc, QLatin1String(t.cue));
         LESSON_STEP(view->selectNode(id), t.cue);
         settle(50);
+        LESSON_STEP(clickCueTabOf(view, view->m_cueTc), "no Timing tab");
         LESSON_STEP(view->m_cueTc != nullptr && view->m_cueTc->isVisible(), "no At timecode box");
         view->m_cueTc->setText(QLatin1String(t.text));
         QTest::keyClick(view->m_cueTc, Qt::Key_Return);
@@ -7190,6 +7194,7 @@ void CourseShow_Test::levelThreePictures()
         QVERIFY(v->selectNode(cueNumbered(doc, "1.0.1")));
         settle(100);
         layOutForShot(v);
+        QVERIFY(clickCueTabOf(v, v->m_cueTc));
         QVERIFY(v->m_cueTc != nullptr && v->m_cueTc->isVisible());
         v->m_cueTc->setText(QStringLiteral("00:00:10:00"));
         QTest::keyClick(v->m_cueTc, Qt::Key_Return);

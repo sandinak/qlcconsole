@@ -548,7 +548,6 @@ QWidget *ShowTreeView::lendInspector(quint32 cueId, quint32 layerId, const QStri
     selectAlsoForWorkbench(cueId, alsoLayers);
     updateInspector();
     m_wb->inspectorLent = true;
-    setCueTabsOn(true);          // docked: the cue page's rows go in tabs
     return m_pages;
 }
 
@@ -557,7 +556,6 @@ void ShowTreeView::takeBackInspector()
     if (m_wb == nullptr || !m_wb->inspectorLent)
         return;
     m_wb->inspectorLent = false;
-    setCueTabsOn(false);         // the tree's own page shows every row
     if (QSplitter *vsplit = pageSplitter(this))
     {
         vsplit->insertWidget(0, m_pages);

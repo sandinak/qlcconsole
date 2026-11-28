@@ -500,6 +500,13 @@ void ShowNotes_Test::theShowAndSectionPagesTakeNotesThatFollowAndExport()
         for (const QSize &size : { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) })
         {
             view.resize(size);
+            // The tree is rebuilt after the export: the row is found again.
+            row = nullptr;
+            for (QTreeWidgetItemIterator it(view.tree()); *it; ++it)
+                if ((*it)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::SectionNode
+                    && (*it)->text(0).contains("Entrance"))
+                    row = *it;
+            QVERIFY(row != nullptr);
             view.tree()->setCurrentItem(row);
             QApplication::processEvents();
             view.grab().save(QString("%1/section-notes-%2x%3.png").arg(shotDir).arg(size.width()).arg(size.height()));

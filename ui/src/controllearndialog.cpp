@@ -230,6 +230,10 @@ ControlLearnDialog::ControlLearnDialog(Doc *doc, const ControlMap::Target &targe
     lay->addWidget(m_collision);
     connect(m_collision, &ControlCollisionBox::moveRequested, this, &ControlLearnDialog::slotMoveHere);
     connect(m_collision, &ControlCollisionBox::stepThroughRequested, this, &ControlLearnDialog::slotStepThrough);
+    // The free button the refusal offers: learnt as if it had been pressed.
+    connect(m_collision, &ControlCollisionBox::useFreeRequested, this, [this](quint32 universe, quint32 channel) {
+        slotHeard(universe, channel);
+    });
     // Another place: another answer to who has the control (Q296).
     connect(m_place, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this]() {
         if (hasControl())

@@ -148,6 +148,7 @@
 #include "timecodecues.h"
 #include "timecodesource.h"
 #include "showtreeview_test.h"
+#include "../common/cuetabs.h"
 #include "../common/dragpos.h"
 
 using namespace ShowTree;
@@ -158,6 +159,7 @@ using namespace ShowTree;
 
 void ShowTreeView_Test::init()
 {
+    ShowTreeView::forgetCueTab();     // each test starts on Edit, whatever the last left
     m_doc = new Doc(this);
     m_fixtures.clear();
     for (int i = 0; i < 6; ++i)
@@ -1191,6 +1193,7 @@ void ShowTreeView_Test::cueFieldsEditTheCue()
     QVERIFY(QTest::qWaitForWindowActive(&view));
     NoteEdit *note = view.findChild<NoteEdit *>("stCueNote");
     QVERIFY(note != nullptr);
+    QVERIFY(clickCueTabOf(&view, note));     // the note is on Notes
     const int closed = note->height();
     note->setFocus(Qt::MouseFocusReason);
     QVERIFY(note->isExpanded());
@@ -5821,6 +5824,7 @@ void ShowTreeView_Test::hitsLiveUnderTheirPlace()
     // Its page says when.
     QVERIFY(view.selectNode(strobe));
     QLabel *when = view.findChild<QLabel *>("stHitWhen");
+    QVERIFY(clickCueTabOf(&view, when));
     QVERIFY(when->isVisibleTo(&view));
     QVERIFY2(when->text().startsWith("While it is live"), qPrintable(when->text()));
     QVERIFY(when->text().contains("not armed now"));
@@ -5947,7 +5951,9 @@ void ShowTreeView_Test::looksSectionInTheTree()
     // Its fade in / out (Q180), not a hold: typed, then the page moves on.
     QDoubleSpinBox *hitIn = view.findChild<QDoubleSpinBox *>("stCueFadeIn");
     QDoubleSpinBox *hitOut = view.findChild<QDoubleSpinBox *>("stCueFadeOut");
+    QVERIFY(clickCueTabOf(&view, hitIn));
     QVERIFY(hitIn->isVisibleTo(&view));
+    QVERIFY(clickCueTabOf(&view, hitOut));
     QVERIFY(hitOut->isVisibleTo(&view));
     QVERIFY(!view.findChild<QDoubleSpinBox *>("stCueHold")->isVisibleTo(&view));
     hitIn->setValue(1.5);
@@ -5962,6 +5968,7 @@ void ShowTreeView_Test::looksSectionInTheTree()
     // 0.4: Override on its page, "override" on its row; one undo step.
     QCheckBox *over = view.findChild<QCheckBox *>("stHitOverride");
     QVERIFY(over != nullptr);
+    QVERIFY(clickCueTabOf(&view, over));
     QVERIFY(over->isVisibleTo(&view));
     QVERIFY(!over->isChecked());
     over->setChecked(true);
@@ -6469,6 +6476,7 @@ void ShowTreeView_Test::subCuesInTheTree()
     // The page: Advance (not mode / base / hold); Auto-follow is one step.
     QVERIFY(view.selectNode(s2));
     QComboBox *adv = view.findChild<QComboBox *>("stSubCueAdvance");
+    QVERIFY(clickCueTabOf(&view, adv));
     QVERIFY(adv->isVisibleTo(&view));
     QVERIFY(!view.findChild<QComboBox *>("stCueMode")->isVisibleTo(&view));
     QDoubleSpinBox *wait = view.findChild<QDoubleSpinBox *>("stSubCueWait");
@@ -6496,6 +6504,7 @@ void ShowTreeView_Test::subCuesInTheTree()
     // main cue after its cue.
     QVERIFY(view.selectNode(c1));
     QLabel *line = view.findChild<QLabel *>("stCueSubCues");
+    QVERIFY(clickCueTabOf(&view, line));
     QVERIFY(line->isVisibleTo(&view));
     QVERIFY(line->text().contains("1.1"));
     QVERIFY(view.selectNode(s2));
@@ -6614,6 +6623,7 @@ void ShowTreeView_Test::trackingIsABadgeWithDetailsOnHover()
     QVERIFY(view.cueTrackedText().contains("⤳ Towers — tracked from 1 "));
     QVERIFY(view.cueTrackedText().contains("    Dimmer: Half"));
     QLabel *page = view.findChild<QLabel *>("stCueTracked");
+    QVERIFY(clickCueTabOf(&view, page));
     QVERIFY(page != nullptr && page->isVisibleTo(&view));
     QVERIFY(page->text().contains("Colour: Blue"));
 
@@ -7261,6 +7271,7 @@ void ShowTreeView_Test::skipCuesInTheTree()
     // The cue page's Skip.
     QVERIFY(view.selectNode(c[3]));
     QCheckBox *skipBox = view.findChild<QCheckBox *>("stCueSkip");
+    QVERIFY(clickCueTabOf(&view, skipBox));
     QVERIFY(skipBox != nullptr && skipBox->isVisibleTo(&view));
     QVERIFY(!skipBox->isChecked());
     skipBox->setChecked(true);
@@ -8868,6 +8879,7 @@ void ShowTreeView_Test::cuesAtATimecodeAreSetOnTheCueAndListPages()
     // The cue's page: the time, typed; a bad one refused; cleared.
     QVERIFY(view.selectNode(c[1]));
     QLineEdit *tc = view.findChild<QLineEdit *>("stCueTimecode");
+    QVERIFY(clickCueTabOf(&view, tc));
     QVERIFY(tc != nullptr && tc->isVisibleTo(&view));
     QVERIFY(tc->text().isEmpty());
     tc->setText("00:01:23:10");
@@ -8907,6 +8919,7 @@ void ShowTreeView_Test::needsWorkInTheTree()
     // The cue page's Needs work: one undo step, flagged on the row with the note.
     QVERIFY(view.selectNode(c1));
     QCheckBox *nw = view.findChild<QCheckBox *>("stCueNeedsWork");
+    QVERIFY(clickCueTabOf(&view, nw));
     QVERIFY(nw != nullptr && nw->isVisibleTo(&view));
     QVERIFY(!nw->isChecked());
     nw->setChecked(true);
@@ -9106,6 +9119,7 @@ void ShowTreeView_Test::theCuePagePicksTheBlocking()
 
     QVERIFY(view.selectNode(c[1]));
     QComboBox *combo = view.findChild<QComboBox *>("stCueBlocking");
+    QVERIFY(clickCueTabOf(&view, combo));
     QVERIFY(combo != nullptr && combo->isVisibleTo(&view));
     QCOMPARE(combo->count(), 3);
     QCOMPARE(combo->itemText(0), QString("Tracks (Default)"));
@@ -9506,6 +9520,7 @@ void ShowTreeView_Test::moveInBlackPerListAndCueInTheTree()
     // The cue page's "Don't move in black into this cue": badged on the row.
     QVERIFY(view.selectNode(c[1]));
     QCheckBox *noMib = view.findChild<QCheckBox *>("stCueNoMib");
+    QVERIFY(clickCueTabOf(&view, noMib));
     QVERIFY(noMib != nullptr && noMib->isVisibleTo(&view));
     QVERIFY(!noMib->isChecked());
     noMib->setChecked(true);
@@ -9635,6 +9650,7 @@ void ShowTreeView_Test::textColoursInTheTreePagesAndWorkbench()
     // A cue's page: None (the list's: Blue); from its button's menu, Red.
     QVERIFY(view.selectNode(c[1]));
     QToolButton *cueButton = view.findChild<QToolButton *>("stCueColour");
+    QVERIFY(clickCueTabOf(&view, cueButton));
     QVERIFY(cueButton != nullptr && cueButton->isVisibleTo(&view));
     QCOMPARE(cueButton->text(), QString("None (the list's: Blue)"));
     QMenu *menu = cueButton->menu();
@@ -10111,6 +10127,7 @@ void ShowTreeView_Test::typedTimesAreKeptWhenFocusLeaves()
         QTest::mouseClick(tree->viewport(), Qt::LeftButton, Qt::NoModifier, r.center());
     };
     auto typeIn = [&](QDoubleSpinBox *box, const QString &text) {
+        QVERIFY(clickCueTabOf(&view, box));
         box->setFocus();
         QTRY_VERIFY(box->hasFocus());
         box->selectAll();
@@ -10190,6 +10207,7 @@ void ShowTreeView_Test::aTimeNotYetLeftIsWhatGoPlays()
     QVERIFY(view.selectNode(c1));
 
     // Typed, no Return, the focus still there: GO.
+    QVERIFY(clickCueTabOf(&view, fadeIn));
     fadeIn->setFocus();
     QTRY_VERIFY(fadeIn->hasFocus());
     fadeIn->selectAll();
@@ -10240,6 +10258,7 @@ void ShowTreeView_Test::aTimeTakesEitherDecimalMark()
     QDoubleSpinBox *fadeOut = view.findChild<QDoubleSpinBox *>("stCueFadeOut");
     QVERIFY(fadeIn != nullptr && fadeOut != nullptr);
     auto typeIn = [&](QDoubleSpinBox *box, const QString &text) {
+        QVERIFY(clickCueTabOf(&view, box));
         box->setFocus();
         QTRY_VERIFY(box->hasFocus());
         box->selectAll();
@@ -11465,6 +11484,7 @@ void ShowTreeView_Test::theHitPageFadeBoxesSetTheHitsFades()
     QVERIFY(view.selectNode(hit));
     QDoubleSpinBox *in = view.findChild<QDoubleSpinBox *>("stCueFadeIn");
     QDoubleSpinBox *out = view.findChild<QDoubleSpinBox *>("stCueFadeOut");
+    QVERIFY(clickCueTabOf(&view, in));
     QVERIFY(in->isVisibleTo(&view) && out->isVisibleTo(&view));
     const QString before = treeState(m_doc);
 

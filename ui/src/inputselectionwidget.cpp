@@ -124,6 +124,14 @@ InputSelectionWidget::InputSelectionWidget(Doc *doc, QWidget *parent)
 
     m_self.kind = ControlOwners::VCInput;
     m_collision = new ControlCollisionBox(this);
+    // The free button the refusal offers: taken as if it had been picked.
+    connect(m_collision, &ControlCollisionBox::useFreeRequested, this, [this](quint32 universe, quint32 channel) {
+        showJobs(universe, channel);
+        if (refuseTaken(universe, channel, m_pendingKeepFeedback))
+            return;
+        takeSource(universe, channel, m_pendingKeepFeedback);
+        emit inputValueChanged(universe, channel);
+    });
     connect(m_collision, &ControlCollisionBox::moveRequested, this, [this]() {
         // Take it from there, then set it here.
         const quint32 universe = m_collision->property("learnUniverse").toUInt();

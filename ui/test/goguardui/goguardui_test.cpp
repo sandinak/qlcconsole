@@ -61,6 +61,7 @@
 #include "doc.h"
 
 #include "goguardui_test.h"
+#include "../common/cuetabs.h"
 
 namespace
 {
@@ -394,6 +395,7 @@ void GoGuardUi_Test::theFastTickIsOnTheCuePage()
     settle();
     QCheckBox *fast = view->findChild<QCheckBox *>(QStringLiteral("stCueFast"));
     QVERIFY(fast != nullptr);
+    QVERIFY(clickCueTabOf(view, fast));
     QVERIFY(fast->isVisibleTo(view));
     QCOMPARE(fast->text(), QStringLiteral("Fast: Next GO Never Held"));
     QVERIFY(!fast->isChecked());

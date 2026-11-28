@@ -78,6 +78,7 @@
 #include "doc.h"
 
 #include "showtreeworkbench_test.h"
+#include "../common/cuetabs.h"
 
 class ImportSheet;
 using namespace ShowTree;
@@ -197,6 +198,7 @@ QSplitter *pageSplitter(ShowTreeView *view)
 
 void ShowTreeWorkbench_Test::init()
 {
+    ShowTreeView::forgetCueTab();     // each test starts on Edit, whatever the last left
     m_doc = new Doc(this);
     m_fixtures.clear();
     for (int i = 0; i < 6; ++i)
@@ -1971,11 +1973,38 @@ void ShowTreeWorkbench_Test::theCuePageIsTabbedInTheWorkbench()
     view.show();
     QVERIFY(QTest::qWaitForWindowExposed(&view));
 
-    // The tree's own page, no Workbench: no tabs, every row there.
+    // The tree's own page, no Workbench: the same tabs (Branson, build 4910:
+    // "fail, no tabs at all" -- he edits a cue on the tree's page too).
     QVERIFY(view.selectNode(s.c2));
-    QVERIFY(!view.cueTabsShown());
-    for (const char *name : { "stCueNumber", "stCueFadeIn", "stCueNote", "stCueMode", "stCueTracked" })
-        QVERIFY2(view.findChild<QWidget *>(name)->isVisibleTo(&view), name);
+    QVERIFY(view.cueTabsShown());
+    QVERIFY(view.findChild<QTabBar *>("stCueTabs")->isVisibleTo(&view));
+    view.showCueTab(ShowTreeView::CueEditTab);
+    QVERIFY(view.findChild<QWidget *>("stCueNumber")->isVisibleTo(&view));
+    QVERIFY(!view.findChild<QWidget *>("stCueFadeIn")->isVisibleTo(&view));
+    view.showCueTab(ShowTreeView::CueTimingTab);
+    QVERIFY(view.findChild<QWidget *>("stCueFadeIn")->isVisibleTo(&view));
+    QVERIFY(!view.findChild<QWidget *>("stCueNumber")->isVisibleTo(&view));
+    view.showCueTab(ShowTreeView::CueEditTab);
+    // The tree's own page, tabbed, at three sizes (UX review).
+    const QString shots = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (!shots.isEmpty())
+    {
+        QDir().mkpath(shots);
+        for (const QSize &sz : { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) })
+        {
+            view.resize(sz);
+            for (int t : { int(ShowTreeView::CueEditTab), int(ShowTreeView::CueTimingTab) })
+            {
+                view.showCueTab(ShowTreeView::CueTab(t));
+                QTest::qWait(150);
+                QVERIFY(view.grab().save(QDir(shots).filePath(
+                    QStringLiteral("cue-tree-tab%1-%2x%3.png").arg(t).arg(sz.width()).arg(sz.height()))));
+            }
+        }
+        view.resize(1024, 640);
+        view.showCueTab(ShowTreeView::CueEditTab);
+        QTest::qWait(100);
+    }
 
     QVERIFY(view.openInWorkbench(s.c2));
     Workbench *bench = view.dockedWorkbench();
@@ -2033,8 +2062,10 @@ void ShowTreeWorkbench_Test::theCuePageIsTabbedInTheWorkbench()
     // The last tab is remembered, for the session: close, open again.
     view.showCueTab(ShowTreeView::CueTimingTab);
     QVERIFY(view.closeWorkbench());
-    QVERIFY(!view.cueTabsShown());
-    QVERIFY(view.findChild<QWidget *>("stCueNote")->isVisibleTo(&view) || true);
+    // Back on the tree's own page: still tabbed, on the same tab.
+    QVERIFY(view.cueTabsShown());
+    QCOMPARE(view.cueTab(), ShowTreeView::CueTimingTab);
+    QVERIFY(view.findChild<QWidget *>("stCueFadeIn")->isVisibleTo(&view));
     QVERIFY(view.openInWorkbench(s.c2));
     QCOMPARE(view.cueTab(), ShowTreeView::CueTimingTab);
     QVERIFY(view.findChild<QWidget *>("stCueFadeIn")->isVisibleTo(&view));
@@ -2056,6 +2087,7 @@ void ShowTreeWorkbench_Test::theTrackedListWrapsAtASmallSize()
     view.showCueTab(ShowTreeView::CueTrackingTab);
     QTest::qWait(100);
     QLabel *tracked = view.findChild<QLabel *>("stCueTracked");
+    QVERIFY(clickCueTabOf(&view, tracked));
     QVERIFY(tracked != nullptr && tracked->isVisibleTo(&view));
     QVERIFY(tracked->wordWrap());
     // Wide as the pane lets it, never wider, and tall enough for every line.

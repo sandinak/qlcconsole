@@ -203,6 +203,16 @@ public:
     /** The control in words ("MIDI · CC 7, MIDI ch 1", "Key · F5"). */
     static QString controlName(Doc *doc, quint32 universe, quint32 channel);
 
+    /** The first button of @a universe's board (its input profile, in
+     *  channel order) that nothing listens to now, beside @a besides: what
+     *  a refusal offers instead (build 4910: "no recommended fix"). A page
+     *  in @a besides' upper bits is kept. UINT_MAX: none (no profile, or
+     *  every button has a job). */
+    static quint32 firstFreeButton(Doc *doc, quint32 universe, quint32 besides);
+    /** The refusal's plain fix, one line: use @a freeChannel (a free button
+     *  on this board; UINT_MAX: none) and/or Move It Here from @a owners. */
+    static QString recommendedFix(Doc *doc, quint32 universe, quint32 freeChannel, const QList<Owner> &owners);
+
     /** A control two or more listeners have now (a show saved before the
      *  refusal, or set up in files). */
     struct Collision

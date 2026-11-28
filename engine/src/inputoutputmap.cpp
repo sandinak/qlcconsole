@@ -3406,6 +3406,43 @@ QList<quint32> InputOutputMap::universesWithInputOn(const QString &plugin,
     return list;
 }
 
+int InputOutputMap::partnerOutput(const QString &plugin, quint32 inputLine)
+{
+    const QStringList ins = pluginInputs(plugin);
+    if (int(inputLine) >= ins.size() || ins.at(int(inputLine)).isEmpty())
+        return -1;
+    const QStringList outs = pluginOutputs(plugin);
+    const QString name = ins.at(int(inputLine));
+    // The same line number first, when it has the name (most plugins).
+    if (int(inputLine) < outs.size() && outs.at(int(inputLine)) == name)
+        return int(inputLine);
+    return int(outs.indexOf(name));
+}
+
+bool InputOutputMap::feedbackFollowsInput(quint32 universe)
+{
+    if (universe >= universesCount())
+        return false;
+    Universe *uni = m_universeArray.at(int(universe));
+    InputPatch *ip = uni->inputPatch();
+    if (ip == NULL || ip->plugin() == NULL || ip->input() == QLCIOPlugin::invalidLine())
+        return false;
+    const QString plugin = ip->pluginName();
+    const int partner = partnerOutput(plugin, ip->input());
+    if (partner < 0)
+        return false;
+    OutputPatch *fb = uni->feedbackPatch();
+    if (fb != NULL && fb->isPatched())
+    {
+        if (fb->pluginName() != plugin)
+            return false;           // another route, on purpose
+        if (fb->output() == quint32(partner))
+            return false;           // already the board's own
+    }
+    qDebug() << "[IOMAP] universe" << universe + 1 << "feedback follows its input to" << plugin << partner;
+    return setOutputPatch(universe, plugin, QString(), quint32(partner), true, 0);
+}
+
 PatchUndo *InputOutputMap::patchUndo() const
 {
     return m_patchUndo;

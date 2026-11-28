@@ -991,11 +991,17 @@ public:
     bool isWorkbenchDocked() const;
     /** The Workbench docked here (null: none). */
     class Workbench *dockedWorkbench() const;
-    /** The cue page's tabs (visible while the Workbench has it docked). */
+    /** The cue page's tabs (the tree's page and the docked Workbench alike). */
     enum CueTab { CueEditTab = 0, CueTrackingTab, CueTimingTab, CueNotesTab, CueTabCount };
     void showCueTab(CueTab tab);            //!< switch to it (an action that needs it)
     CueTab cueTab() const;
-    bool cueTabsShown() const;              //!< the bar is up (docked, and more than one tab has content)
+    /** Forget the tab kept for the session: the next cue page opens on Edit
+     *  (a new show; a test starting clean). */
+    static void forgetCueTab();
+    bool cueTabsShown() const;              //!< the bar is up (more than one tab has content)
+    /** The tab that holds the cue page's row of @a w (a field, or a widget
+     *  inside one); -1: none (the header, or not the cue page's). */
+    int cueTabOf(const QWidget *w) const;
     /** Where the Workbench comes from: Build's (App sets it) -- @a borrow
      *  takes it out of Build, @a giveBack puts it back as it was. Without
      *  one, the tree makes a Workbench of its own (tests). */
@@ -1475,16 +1481,14 @@ private:
 
     // R3: the Looks section
     QFormLayout *m_cueForm = nullptr;
-    // The cue page's tabs, while the Workbench has it docked (Edit | Tracking | Timing | Notes).
+    // The cue page's tabs, wherever it shows (Edit | Tracking | Timing | Notes).
     class QTabBar *m_cueTabBar = nullptr;
     QHash<QWidget *, int> m_cueRowTab;          //!< a form row's field widget -> its tab
     QHash<QWidget *, bool> m_cueRowWanted;      //!< what the page wants of it, before the tab
-    bool m_cueTabsOn = false;                   //!< docked: the tabs are in use
-    bool m_cueTabsFilter = false;               //!< ... and more than one has something to show
+    bool m_cueTabsFilter = false;               //!< more than one tab has something to show
     bool m_cueTabsSyncing = false;
     static int s_cueTab;                        //!< the last tab, for the session
     static QString cueTabName(CueTab tab);
-    void setCueTabsOn(bool on);
     static QString trackedHtml(const QString &text);
     void registerCueTabs();
     void setCueRow(QWidget *w, bool wanted);

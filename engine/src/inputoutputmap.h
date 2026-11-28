@@ -1344,6 +1344,22 @@ public:
      */
     QList<quint32> universesWithInputOn(const QString &plugin, quint32 line) const;
 
+    /** The output line of @a plugin that is the same device as its input
+     *  line @a inputLine (the same name: a MIDI board's own port back, where
+     *  its lamps go); -1: it has none. */
+    int partnerOutput(const QString &plugin, quint32 inputLine);
+
+    /**
+     * A board's lamps follow its input: universe @a universe's feedback is
+     * moved to the output of the device its input now comes from, when that
+     * device has one (partnerOutput()) and the feedback is unpatched or on
+     * another line of the same plugin -- left behind by the board patched
+     * there before (Branson, build 4910: the PMJ patched where an APC was,
+     * its lamps still sent to the APC's old line). Feedback on another
+     * plugin is a route chosen on purpose and is left. True: it moved.
+     */
+    bool feedbackFollowsInput(quint32 universe);
+
     /**
      * One step of undo for patch changes. Owned here because this is what owns
      * the patches; the UI reaches it through the map rather than keeping its

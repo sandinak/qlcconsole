@@ -80,6 +80,7 @@ private slots:
 
     /* Repointing an existing patch */
     void retargetWritesTargetOntoTheExistingPatch();
+    void aBoardPatchedWhereAnotherWasTakesItsLampsWithIt();
     void retargetToBroadcastRemovesTheParameters();
 
     /* Plugin parameters previously reachable only from Overview */

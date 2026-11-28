@@ -47,7 +47,7 @@ Should the scream still have the white flash? Why?
 
    ![What tracks into the chorus](../../images/lesson-2-1/chorus-tracking.png)
 
-4. Scroll down its page: **Tracked in** and **Next cue receives**.
+4. Its page's **Tracking** tab: **Tracked in** and **Next cue receives**.
 5. Look at **1.0.4 Solo**: **B** under **M**, nothing under **T**. Block:
    a hard start.
 6. Click **1.0.1 Verse**, then its **StepTops** row.

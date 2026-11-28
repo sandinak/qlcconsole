@@ -322,6 +322,9 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
+- **A board's lamps follow its input**: patching the PMJ (or any MIDI board) onto a universe moves its feedback to the board's own output when it was empty or on another MIDI line; on dink U01's feedback was still the old board's line (Network RTP Session 1), so every PMJ lamp went there.
+- **One job per control says the fix**: a refused control's box adds a *Recommended:* line and **Use <control>**, the first free button on the board, learnt in one click (a speed master's Inputs…, a widget's External Input, Assign to Control…).
+- **The Show Tree's own cue page is tabbed too** (Edit | Tracking | Timing | Notes), the same as in the Workbench: it had every row in one scroll and no tabs (build 4910). A new cue opens on Edit, ready for its name; the course steps name the tab a field is on.
 - **The footer says why**: the **Pad** chip no longer shows with no game
   controller connected (it appears on connect, goes on unplug); a control
   greyed by the workspace level names the level on its face (**Edit Live ·

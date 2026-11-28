@@ -84,7 +84,7 @@ On the projector:
 
 1. Click **1.0.2 Chorus**. Point at the grey rows under it and the
    **S 1 / T 4** on its row; hover the **T** header to show its name.
-   Scroll the page down to **Tracked in** and **Next cue receives**.
+   Click the page's **Tracking** tab: **Tracked in** and **Next cue receives**.
 2. Click **1.0.1 Verse** → its **StepTops** row → tick **Release**. Read
    the top bar aloud: *"Changed: 1.0.2 Chorus, 1.0.3 Scream"*. Click the
    chorus: the step tops are dark on the Rig Overview.

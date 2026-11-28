@@ -63,7 +63,7 @@ In the solo, where will the audience look, and why?
    ![Front light, aimed at Center](../../images/lesson-1-3/rig-verse-center.png)
 
 6. Click **1.0.3 Scream**, then **+ Cue**, type `Solo`, press **Return**.
-7. On the Solo's page, set **Mode** to **Block**. The grey rows go and
+7. On the Solo's page (**Tracking** tab), set **Mode** to **Block**. The grey rows go and
    the stage goes dark.
 8. Drag **AT-Spots** (Groups → AT) onto the dashed box.
 9. Drag **White** and **Full** onto the **AT-Spots** row. Two pools of

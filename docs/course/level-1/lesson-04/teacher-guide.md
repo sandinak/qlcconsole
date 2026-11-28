@@ -68,7 +68,7 @@ music, then choose.
 
 ## 2. Teacher demo (10 min)
 
-1. Click **1.0.0 Pose**. On its page, click in **Fade in**, select what's
+1. Click **1.0.0 Pose**. On its page's **Timing** tab, click in **Fade in**, select what's
    there, type **3**, press **Return**.
 2. "Clicking cues in the tree shows each one at once. Fades play when you
    press **GO**." Click the production, so nothing is previewed.

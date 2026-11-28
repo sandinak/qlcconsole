@@ -1,3 +1,4 @@
+
 /*
   Q Light Controller Plus
   songsections_test.cpp
@@ -40,6 +41,7 @@
 #include "doc.h"
 
 #include "songsections_test.h"
+#include "../common/cuetabs.h"
 
 using namespace ShowTree;
 
@@ -428,6 +430,7 @@ void ShowTreeSectionsUi_Test::timecodeAnchorsOnThePages()
     QVERIFY(st->setCueTimecode(ids[5], 34000));
     QVERIFY(view.selectNode(ids[5]));
     QLabel *base = view.findChild<QLabel *>("stCueTimecodeBase");
+    QVERIFY(clickCueTabOf(&view, base));
     QVERIFY(base != nullptr && base->isVisibleTo(&view));
     QCOMPARE(base->text(), QString("+4.0 s from 1 — 01-Everybody Scream"));
     QCheckBox *anchor = view.findChild<QCheckBox *>("stCueTimecodeAnchor");
