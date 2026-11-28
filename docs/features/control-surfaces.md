@@ -436,16 +436,64 @@ a click opens its map.
   it to a name, a job or a page. A row you select is the control outlined on
   the drawing, and a control you click on the drawing is the selected row.
 - **Click a control to give it a job.** A click on a key offers **GO**,
-  **Back**, **STOP (all off)**, **Page ◀**, **Page ▶** and a key for each
-  page; on a fader, **Grand Master**; on a knob or encoder the page decides.
-  Every list ends with **Other… (Assign to Control)** (it tells you how to
-  assign a scene, cue or hit to the control) and **No job**. The job ticked is
-  the one it has. GO, Back, STOP and the Grand Master are this computer's
-  desk (the same as **Learn…**, without the press); the page keys are this
-  computer's too. The last change has an **Undo** at the foot of the list. In
-  Operate, a show with a PIN asks for it first, as **Assign to Control…** does.
-  Jobs such as Sub GO, Blackout, Blind and Flash a group, and a Shift guard
-  on STOP, are not in the list yet.
+  **Back**, **STOP (all off)**, the show's board jobs (below), **Page ◀**,
+  **Page ▶** and a key for each page; on a fader, **Grand Master** and the
+  fader jobs; on a knob or encoder the page decides. Every list ends with
+  **Other… (Assign to Control)** (it tells you how to assign a scene, cue or
+  hit to the control) and **No job**. The job ticked is the one it has; a job
+  with a number (a group, a cue, a speed master, a time) is a submenu, and
+  its name says the one chosen. GO, Back, STOP and the Grand Master are this
+  computer's desk (the same as **Learn…**, without the press); the page keys
+  are this computer's too; the board jobs are the show's, saved with it. A
+  control has one job: giving it another takes the first one off it. The last
+  change has an **Undo** at the foot of the list. In Operate, a show with a
+  PIN asks for it first, as **Assign to Control…** does.
+
+### What a control can do
+
+| On a key | What a press does | Its lamp |
+|---|---|---|
+| **GO**, **Back** | GO or Back on the Run tab's list (this computer's desk). | Ready while there is a cue to play. |
+| **STOP (all off)** | The emergency stop. On a board that asks for it (the FaderPort 2), only with Shift held: **Shift+Stop**. | Lit; blinks after a stop. |
+| **Sub GO** | Sub GO on the Run tab's list: the next sub-cue of the cue playing. | Ready while the cue playing has sub-cues. |
+| **Next song**, **Previous song** | The next (or previous) song's first cue is put on standby in the Run tab's list. Nothing plays until GO. | Dark when there is no song that way. |
+| **Jump to cue ▸ N** | GO cue N of the Run tab's list. | Ready while it can play. |
+| **Flash a group ▸ N** | While held, the group's lights are at full (the dimmer, or red, green, blue and white). Let go, they are back. | Bright while held. |
+| **Tap the tempo ▸ N** | Taps speed master N: its tempo from your last taps. | Ready. |
+| **Blind** | The toolbar's **Blind** button: a mute in Design, the Blind view in Operate. One press on, the next off. | Bright while Blind is on. |
+| **Edit Live: Store** | Edit Live's **Store**: the trims are kept in the cue's looks (one undo step). Nothing to store, it says so. | Ready while there are trims. |
+| **Blackout (Shift+)** | Blackout on, the next one off. **Hold Shift and press the key.** | Bright while blacked out. |
+| **Fade and stop (Shift+) ▸ N s** | Everything fades out over N seconds and stops, as the toolbar's **Fade and stop**. **Hold Shift and press the key.** | Ready while something runs. |
+| **Clear the selection (Shift+)** | The fixtures selected in Build are let go of. **Hold Shift and press the key.** | Ready while fixtures are selected. |
+| **Page ◀**, **Page ▶**, **Page: name** | The board's page (this computer's). | Lit while there is a page that way. |
+
+| On a fader | What it does |
+|---|---|
+| **Grand Master** | The Grand Master (this computer's desk). |
+| **A group's level ▸ N** | Group N's master: its lights scaled by the fader, as the Grand Master scales everything. Giving the job turns the group's master on. It follows the fader at once, as any master does. |
+| **Effect speed ▸ N** | Speed master N's rate: the middle is the tempo as set, the top twice it, the bottom stopped. It waits to be picked up: until the fader reaches the rate, the footer says where to move it. |
+| **Effect size** | How far every playing effect goes over what is under it: the top as made, half way half as far, the bottom none. Picked up at the top (where it starts). Not saved: it is the fader's place. |
+
+A knob or encoder turns what the page says.
+
+**Two controls for the dangerous ones.** Blackout, Fade and stop and Clear
+the selection never fire on one press: hold the board's **Shift** and press
+the key, as Shift+Stop. A press alone does nothing and the footer says
+*Blackout takes two controls: hold Shift and press …*; a Shift pressed and let
+go first does not count. A board with no Shift key (the APC mini mk2, the PMJ)
+cannot be given them: the list greys them out with *needs a Shift key*. The
+**APC40 mkII**'s **Shift** (bottom right, beside **Bank**) is its Shift; the
+**FaderPort 2**'s is its own.
+
+Decided: **Blind** and **Edit Live: Store** are one press. Blind never
+darkens a live show (in Operate it is the Blind view; in Design a mute you
+see on the screen at once), and Store is one undo step that only keeps what
+you trimmed, and does nothing when there is nothing. Neither can hurt the
+stage.
+
+In Design, a control the board's page uses (the APC40's faders 1 to 6 and 8,
+its first two track knobs) does the page's job; its board job waits for
+Operate, as a show's trigger does.
 - **Page ◀ and Page ▶.** A board with pages (the APC40 mk2, the APC64, the
   PMJ, the MaizeDMX) has its page keys chosen here: give any key **Page ◀**
   or **Page ▶**, and a key of its own to a page. They are lit while there is
@@ -473,8 +521,9 @@ a click opens its map.
 The **MaizeDMX Playback Controller** shows up as **USB2.0-MIDI** (a name many
 USB MIDI boxes share): patch it with the profile **MaizeDMX Playback
 Controller**. The map and its default roles come from the profile, never the
-port's name. Its **BO** key is printed Blackout; it has no job yet in
-qlcconsole (the map says *Blackout (coming)*). The small circles above the
+port's name. Its **BO** key is printed Blackout; the map says *Blackout
+(coming)*. Blackout takes two controls (Shift and the key) and the MaizeDMX
+has no Shift key, so the key can be given another job but not Blackout. The small circles above the
 faders (*LED 1* to *LED 11*) are lights on the board, not knobs: the map
 draws them as lamps. **X7** is its **Colour** page and **X9** its **Move**
 page (see [Pages](#pages)), each lit while it is on; its lamps need its
@@ -1204,6 +1253,30 @@ and never surprises you when it comes back.
 
 These steps need the hardware. Do them once on the desk you will use,
 after any build that changes a surface, and say which build.
+
+**Board jobs on the APC40 mkII (Q355)**
+
+Start with a show that has a fixture group and a cue list with two or more
+songs as the Run tab's list, in Design, the APC40 mkII plugged in.
+
+1. **Blackout with Shift.** Open **Connections ▸ Control surfaces**, click
+   **Clip 1-1** (top left pad) on the APC40's map ▸ **Blackout (Shift+)**.
+   *Expect:* the pad on the map says *Shift+Blackout*; on the board it is
+   lit. Press the pad alone. *Expect:* no blackout; the footer says
+   *Blackout takes two controls: hold Shift and press …*. Hold **Shift**
+   (bottom right, beside **Bank**) and press the pad. *Expect:* the stage
+   goes black, the toolbar's Blackout is on and the pad is bright. Shift +
+   pad again. *Expect:* the stage comes back.
+2. **Flash a group.** Click **Clip 1-2** ▸ **Flash a group ▸** your group.
+   Hold the pad. *Expect:* that group at full while held, the pad bright;
+   let go, the stage as it was.
+3. **Next song.** Click **Clip 1-3** ▸ **Next song**. Press it. *Expect:*
+   nothing plays; the Run tab's standby (and the footer's *Next:*) is the
+   next song's first cue. Press **PLAY** (GO). *Expect:* that cue plays.
+   On the last song the pad is dark.
+4. **A group's level** (optional). Switch to Operate. Click **Fader 2** ▸
+   **A group's level ▸** your group and move the fader. *Expect:* that
+   group's lights follow it, nothing else.
 
 **Plugged in, set up by itself (053 boards)**
 

@@ -879,7 +879,8 @@ void EffectScriptRunner::publishWrites()
                 }
             }
             // Part way in or out: each write that far over what is under it.
-            const float depth = inst->depth();
+            // The board's Effect size fader takes every effect down with it.
+            const float depth = inst->depth() * m_sizeMaster;
             if (depth < 1.0f)
                 for (int i = from; i < int(combined.size()); ++i)
                     if (!combined.at(i).snap)
@@ -895,6 +896,15 @@ void EffectScriptRunner::publishWrites()
     m_publishedWrites = combined;
     m_publishedGateSets = gateSets;
     m_drawn = drawn;
+}
+
+void EffectScriptRunner::setSizeMaster(float size)
+{
+    size = qBound(0.0f, size, 1.0f);
+    if (size == m_sizeMaster)
+        return;
+    m_sizeMaster = size;
+    publishWrites();        // at once, not at the next tick that draws
 }
 
 void EffectScriptRunner::setScenesOffStage(const QSet<quint32> &sceneIds)

@@ -399,7 +399,10 @@ App::~App()
 
     // The one GO path points at this App: not once it is gone.
     if (m_doc != NULL)
+    {
         m_doc->showControl()->setRunHandler(nullptr);
+        m_doc->controlMap()->setBlindHandler(nullptr, nullptr);
+    }
 
     // Stop autosave timer
     if (m_autosaveTimer != NULL)
@@ -3106,6 +3109,11 @@ void App::initActions()
     m_doc->showControl()->setRunHandler([this](const ShowControl::Request &r, ShowControl::Route route) {
         return runCommand(r, route);
     });
+    /* A board's Blind job (Q355) is the console's Blind button: one rule,
+       a mute in Design and the Blind view in Operate. Its light follows it. */
+    m_doc->controlMap()->setBlindHandler([this]() { toggleBlind(); },
+                                         [this]() { return m_controlBlindAction != NULL && m_controlBlindAction->isChecked(); });
+    connect(m_controlBlindAction, &QAction::toggled, m_doc->controlMap(), &ControlMap::refreshLamps);
     /* The double-GO guard (board Q233; its rules at ShowControl::run()):
        this computer's window, from Settings ▸ General ▸ Show Controls. A
        hold shows on the footer's Next chip at once, not at the next poll. */

@@ -111,6 +111,13 @@ public slots:
      *  it comes back where it would be. Main thread. */
     void setScenesOffStage(const QSet<quint32> &sceneIds);
 
+    /** The board's Effect size fader (ControlMap::EffectSizeTarget, board
+     *  Q355): every playing effect goes this far (0..1) over what is under
+     *  it, times its own depth (a fade in or out). 1, the default: as
+     *  made. Not saved: a fader's place. Main thread. */
+    void setSizeMaster(float size);
+    float sizeMaster() const { return m_sizeMaster; }
+
 public:
     /*********************************************************************
      * Live overrides (a VC control, docs/design/VC_EFFECT_CONTROLS.md):
@@ -194,6 +201,8 @@ private:
     /** Collect every live instance's DMX writes into m_publishedWrites, which is
      *  the ONLY thing writeDMX() (MasterTimer thread) reads. Main thread only. */
     void publishWrites();
+    /** setSizeMaster() */
+    float m_sizeMaster = 1.0f;
 
 
     /** The RUNNING instance for @p paletteId, or nullptr. (Parked instances are

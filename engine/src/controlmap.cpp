@@ -44,6 +44,11 @@
 #include "qlcioplugin.h"
 #include "function.h"
 #include "chaser.h"
+#include "effectscriptrunner.h"
+#include "programmercontroller.h"
+#include "speedmasters.h"
+#include "fixturegroup.h"
+#include "outputlayer.h"
 #include "doc.h"
 
 #define KXMLTrigger QStringLiteral("Trigger")
@@ -122,10 +127,22 @@ ControlMap::ControlMap(Doc *doc)
     }
     // A show loaded: its tree and its triggers are both there now.
     connect(m_doc, &Doc::loaded, this, &ControlMap::fixPlaces);
+    /* The board jobs' lights (Q355) follow what they show: Blackout and
+       Blind, Edit Live's trims, the selection. Through the one queue. */
+    if (InputOutputMap *iom = m_doc->inputOutputMap())
+    {
+        connect(iom, &InputOutputMap::blackoutChanged, this, &ControlMap::slotLampsMayHaveChanged);
+        connect(iom, &InputOutputMap::outputInhibitedChanged, this, &ControlMap::slotLampsMayHaveChanged);
+    }
+    connect(m_editLive, &EditLive::changed, this, &ControlMap::slotLampsMayHaveChanged);
+    if (m_doc->programmer() != nullptr)
+        connect(m_doc->programmer(), &ProgrammerController::programmerSelectionChanged, this,
+                &ControlMap::slotLampsMayHaveChanged);
 }
 
 ControlMap::~ControlMap()
 {
+    delete m_flashLayer;
 }
 
 /*****************************************************************************
@@ -169,9 +186,18 @@ void ControlMap::setBinding(const Binding &in, bool stepThrough)
     if (!in.target.isValid() || in.universe == 0xFFFFFFFF || in.channel == 0xFFFFFFFF)
         return;
     Binding b = in;
-    // The emergency stop is everywhere, always (CONTROL_SCOPES §6).
-    if (b.target.type == EmergencyStopTarget)
+    // The emergency stop is everywhere, always (CONTROL_SCOPES §6); so is
+    // a board job (Q355), which acts on the console, not on a place.
+    if (b.target.type == EmergencyStopTarget || isJobType(b.target.type))
         b.place = Place();
+    // A job acts one way only (modesFor()).
+    if (isJobType(b.target.type) && !modesFor(b.target.type).contains(b.mode))
+        b.mode = modesFor(b.target.type).first();
+    // A group's level fader is its group master: the group gets one.
+    if (b.target.type == GroupLevelTarget)
+        if (FixtureGroup *g = m_doc->fixtureGroup(b.target.id))
+            if (!g->hasMaster())
+                g->setMaster(true);
     if (b.place.scope != Everywhere && b.place.scope != NewerPlace && b.place.id == 0xFFFFFFFF)
         b.place = Place();
     if (m_bindings.contains(b))
@@ -300,6 +326,14 @@ void ControlMap::reset()
     m_lampSent.clear();
     m_dimWhenReady = true;
     m_shiftStop = m_shiftRelease = GuardAuto;
+    // A Flash held, a Shift held and the faders' places: the new show's own.
+    for (quint32 g : QSet<quint32>(m_flashHeld))
+        flashGroup(g, false);
+    m_shiftDown.clear();
+    m_pickups.clear();
+    m_effectSize = 255;
+    if (m_doc->effectScriptRunner() != nullptr)
+        m_doc->effectScriptRunner()->setSizeMaster(1.0f);
     const bool had = !m_bindings.isEmpty() || m_listening || !m_down.isEmpty();
     m_bindings.clear();
     m_step.clear();
@@ -342,12 +376,20 @@ void ControlMap::rebuild()
 {
     m_byControl.clear();
     m_keyBindings = 0;
+    m_guardedJobs = 0;
+    m_faderJobs = 0;
     for (int i = 0; i < m_bindings.count(); ++i)
     {
         m_byControl[key(m_bindings.at(i).universe, m_bindings.at(i).channel)] << i;
         if (isKey(m_bindings.at(i)))
             ++m_keyBindings;
+        if (isGuardedJob(m_bindings.at(i).target.type))
+            ++m_guardedJobs;
+        if (isFaderJob(m_bindings.at(i).target.type))
+            ++m_faderJobs;
     }
+    if (m_guardedJobs == 0)
+        m_shiftDown.clear();
 }
 
 void ControlMap::updateConnections()
@@ -722,6 +764,22 @@ bool ControlMap::targetExists(const Target &target) const
             return m_doc->showTree()->cue(target.id) != nullptr;
         case EmergencyStopTarget:
             return true;
+        case FlashGroupTarget:
+        case GroupLevelTarget:
+            return m_doc->fixtureGroup(target.id) != nullptr;
+        case TapTarget:
+        case EffectSpeedTarget:
+            return m_doc->speedMasters() != nullptr && int(target.id) < m_doc->speedMasters()->count();
+        case SubGoTarget:
+        case FadeStopTarget:
+        case BlackoutTarget:
+        case BlindTarget:
+        case NextSongTarget:
+        case PreviousSongTarget:
+        case EditLiveStoreTarget:
+        case ClearSelectionTarget:
+        case EffectSizeTarget:
+            return true;
     }
     return false;
 }
@@ -771,6 +829,42 @@ QString ControlMap::targetName(const Target &target) const
         }
         case EmergencyStopTarget:
             return tr("Emergency stop (ALL OFF)");
+        case SubGoTarget:
+            return tr("Sub GO");
+        case FadeStopTarget:
+            return tr("Fade and stop (%1 s)").arg(target.id);
+        case BlackoutTarget:
+            return tr("Blackout");
+        case BlindTarget:
+            return tr("Blind");
+        case FlashGroupTarget:
+        case GroupLevelTarget:
+        {
+            const FixtureGroup *g = m_doc->fixtureGroup(target.id);
+            if (g == nullptr)
+                break;
+            return target.type == FlashGroupTarget ? tr("Flash: %1").arg(g->name())
+                                                   : tr("Level: %1").arg(g->name());
+        }
+        case NextSongTarget:
+            return tr("Next song");
+        case PreviousSongTarget:
+            return tr("Previous song");
+        case EditLiveStoreTarget:
+            return tr("Edit Live: Store");
+        case ClearSelectionTarget:
+            return tr("Clear the selection");
+        case TapTarget:
+        case EffectSpeedTarget:
+        {
+            const SpeedMasters *sm = m_doc->speedMasters();
+            if (sm == nullptr || int(target.id) >= sm->count())
+                break;
+            return target.type == TapTarget ? tr("Tap: %1").arg(sm->name(int(target.id)))
+                                            : tr("Effect speed: %1").arg(sm->name(int(target.id)));
+        }
+        case EffectSizeTarget:
+            return tr("Effect size");
     }
     return tr("(gone)");
 }
@@ -780,6 +874,14 @@ QString ControlMap::modeName(Mode mode, TargetType type)
     const bool list = isListType(type);
     if (type == EmergencyStopTarget)
         return tr("ALL OFF (each press; never held)");
+    if (isFaderJob(type))
+        return tr("Follows the fader");
+    if (type == FlashGroupTarget)
+        return tr("While held");
+    if (type == BlackoutTarget || type == BlindTarget)
+        return tr("On, then off");
+    if (isJobType(type))
+        return tr("Each press");
     if (type == CueListBackTarget)
         return mode == StopOnly ? tr("Stop the list") : tr("Back");
     switch (mode)
@@ -807,6 +909,22 @@ QList<ControlMap::Mode> ControlMap::modesFor(TargetType type)
         case FunctionTarget:
         case HitTarget:
             break;
+        case BlackoutTarget:
+        case BlindTarget:
+            return { Toggle };
+        case FlashGroupTarget:
+            return { Momentary };
+        case SubGoTarget:
+        case FadeStopTarget:
+        case NextSongTarget:
+        case PreviousSongTarget:
+        case EditLiveStoreTarget:
+        case ClearSelectionTarget:
+        case TapTarget:
+        case GroupLevelTarget:
+        case EffectSpeedTarget:
+        case EffectSizeTarget:
+            return { StartOnly };
     }
     return { Toggle, Momentary, StartOnly, StopOnly };
 }
@@ -821,6 +939,19 @@ QString ControlMap::typeToString(TargetType type)
         case HitTarget:      return QStringLiteral("Hit");
         case EmergencyStopTarget: return QStringLiteral("EmergencyStop");
         case CueListBackTarget: return QStringLiteral("CueListBack");
+        case SubGoTarget: return QStringLiteral("SubGo");
+        case FadeStopTarget: return QStringLiteral("FadeStop");
+        case BlackoutTarget: return QStringLiteral("Blackout");
+        case BlindTarget: return QStringLiteral("Blind");
+        case FlashGroupTarget: return QStringLiteral("FlashGroup");
+        case NextSongTarget: return QStringLiteral("NextSong");
+        case PreviousSongTarget: return QStringLiteral("PreviousSong");
+        case EditLiveStoreTarget: return QStringLiteral("EditLiveStore");
+        case ClearSelectionTarget: return QStringLiteral("ClearSelection");
+        case TapTarget: return QStringLiteral("Tap");
+        case GroupLevelTarget: return QStringLiteral("GroupLevel");
+        case EffectSpeedTarget: return QStringLiteral("EffectSpeed");
+        case EffectSizeTarget: return QStringLiteral("EffectSize");
     }
     return QString();
 }
@@ -828,7 +959,11 @@ QString ControlMap::typeToString(TargetType type)
 bool ControlMap::stringToType(const QString &str, TargetType *type)
 {
     static const TargetType all[] = { FunctionTarget, CueListTarget, CueTarget, HitTarget,
-                                      EmergencyStopTarget, CueListBackTarget };
+                                      EmergencyStopTarget, CueListBackTarget,
+                                      SubGoTarget, FadeStopTarget, BlackoutTarget, BlindTarget,
+                                      FlashGroupTarget, NextSongTarget, PreviousSongTarget,
+                                      EditLiveStoreTarget, ClearSelectionTarget, TapTarget,
+                                      GroupLevelTarget, EffectSpeedTarget, EffectSizeTarget };
     for (TargetType t : all)
     {
         if (typeToString(t) == str)
@@ -873,6 +1008,9 @@ bool ControlMap::stringToMode(const QString &str, Mode *mode)
 void ControlMap::handleInput(quint32 universe, quint32 channel, uchar value)
 {
     const quint64 k = key(universe, channel);
+    // A guarded job's second control (Q355): the board's Shift, held or not.
+    if (m_guardedJobs > 0 && universe != KeyboardUniverse)
+        noteShift(universe, channel, value);
     /* This computer's desk has the control (Q309, Q315): its STOP, GM, GO or
        Back. No trigger here is armed on it, the show's stop included (on the
        desk's STOP the desk stops the show itself; on another role it is
@@ -1007,6 +1145,13 @@ void ControlMap::handleInput(quint32 universe, quint32 channel, uchar value)
             endSwallow(k);
         return;
     }
+    // A fader's job follows every value it sends, 0 too: never a press.
+    if (m_faderJobs > 0)
+        if (const Binding *fj = faderJobOn(k))
+        {
+            faderJob(*fj, value);
+            return;
+        }
     if (value == 0)
     {
         // A release lets go of what its press fired, as it was bound then.
@@ -1360,6 +1505,20 @@ bool ControlMap::press(const Binding &b, bool placeLive)
             return true;
         case EmergencyStopTarget:
             break;
+        case SubGoTarget:
+        case FadeStopTarget:
+        case BlackoutTarget:
+        case BlindTarget:
+        case FlashGroupTarget:
+        case NextSongTarget:
+        case PreviousSongTarget:
+        case EditLiveStoreTarget:
+        case ClearSelectionTarget:
+        case TapTarget:
+        case GroupLevelTarget:
+        case EffectSpeedTarget:
+        case EffectSizeTarget:
+            return placeLive && pressJob(b);
     }
     return false;
 }
@@ -1384,6 +1543,21 @@ void ControlMap::release(const Binding &b)
             break;
         case CueListBackTarget:     // Back is the press's; the release lets go of nothing
         case EmergencyStopTarget:
+            break;
+        case SubGoTarget:
+        case FadeStopTarget:
+        case BlackoutTarget:
+        case BlindTarget:
+        case FlashGroupTarget:
+        case NextSongTarget:
+        case PreviousSongTarget:
+        case EditLiveStoreTarget:
+        case ClearSelectionTarget:
+        case TapTarget:
+        case GroupLevelTarget:
+        case EffectSpeedTarget:
+        case EffectSizeTarget:
+            releaseJob(b);
             break;
     }
 }
@@ -2320,6 +2494,21 @@ bool ControlMap::isArmed(const Target &target) const
         case FunctionTarget:
         case EmergencyStopTarget:
             break;
+        case SubGoTarget:
+        case FadeStopTarget:
+        case BlackoutTarget:
+        case BlindTarget:
+        case FlashGroupTarget:
+        case NextSongTarget:
+        case PreviousSongTarget:
+        case EditLiveStoreTarget:
+        case ClearSelectionTarget:
+        case TapTarget:
+        case GroupLevelTarget:
+        case EffectSpeedTarget:
+        case EffectSizeTarget:
+            // The console's own job: armed in either mode, as the desk is.
+            return true;
     }
     return false;
 }
@@ -2332,6 +2521,22 @@ bool ControlMap::surfaceMayFire(const Target &target) const
     {
         case FunctionTarget:
         case EmergencyStopTarget:
+            return true;
+        case SubGoTarget:
+        case FadeStopTarget:
+        case BlackoutTarget:
+        case BlindTarget:
+        case FlashGroupTarget:
+        case NextSongTarget:
+        case PreviousSongTarget:
+        case EditLiveStoreTarget:
+        case ClearSelectionTarget:
+        case TapTarget:
+        case GroupLevelTarget:
+        case EffectSpeedTarget:
+        case EffectSizeTarget:
+            /* The console's own job, as the toolbar's buttons: in either
+               mode (a guarded one still takes Shift: pressJob()). */
             return true;
         case CueListTarget:
         case CueTarget:
@@ -2369,6 +2574,19 @@ quint32 ControlMap::feedbackFunction(const Binding &b) const
             return c == nullptr ? 0xFFFFFFFF : c->collection;
         }
         case EmergencyStopTarget:
+        case SubGoTarget:
+        case FadeStopTarget:
+        case BlackoutTarget:
+        case BlindTarget:
+        case FlashGroupTarget:
+        case NextSongTarget:
+        case PreviousSongTarget:
+        case EditLiveStoreTarget:
+        case ClearSelectionTarget:
+        case TapTarget:
+        case GroupLevelTarget:
+        case EffectSpeedTarget:
+        case EffectSizeTarget:
             return 0xFFFFFFFF;
     }
     return 0xFFFFFFFF;
@@ -2386,6 +2604,9 @@ ControlMap::Lamp ControlMap::lamp(const Binding &b) const
         return stopped ? LampStopped : LampStandby;
     if (!targetExists(b.target))
         return LampOff;         // the thing it fired is gone
+    // A board job's light is its own state's (Q355), read from where it lives.
+    if (isJobType(b.target.type))
+        return jobLamp(b);
     const quint32 fid = feedbackFunction(b);
     Function *f = fid == 0xFFFFFFFF ? nullptr : m_doc->function(fid);
     if (f != nullptr && f->isRunning())
@@ -3068,6 +3289,12 @@ bool ControlMap::loadXML(QXmlStreamReader &root)
         {
             b.target.id = 0;            // one stop: whatever id a file gave it
             b.place = Place();          // and always everywhere
+        }
+        if (okT && isJobType(b.target.type))
+        {
+            b.place = Place();          // a board job is everywhere
+            if (!modesFor(b.target.type).contains(b.mode))
+                b.mode = modesFor(b.target.type).first();
         }
         // A target a newer build knows and this one doesn't: left out.
         if (!okU || !okC || !okI || !okT)
