@@ -12,10 +12,6 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ## [Unreleased]
 
-### Added
-
-- **Akai LPD8 and LPD8 mk2 boards**: set up when plugged in (ports *LPD8* and *LPD8 mk2*), drawn on the map, with default jobs for this computer's desk: **Pad 4** GO, **Pad 3** Back, knob **K1** the Grand Master, and the stop on two pads (**Pad 1 + Pad 8**; Pad 1 + Pad 4 releases it). The mk2's RGB pads show each job's colour, painted by the board's colour message.
-
 ### Fixed
 
 - **Timeline drop when scrolled sideways**: a file or function dropped on
@@ -30,6 +26,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Added
 
+- **Akai LPD8 and LPD8 mk2 boards**: set up when plugged in (ports *LPD8* and *LPD8 mk2*), drawn on the map, with default jobs for this computer's desk: **Pad 4** GO, **Pad 3** Back, knob **K1** the Grand Master, and the stop on two pads (**Pad 1 + Pad 8**; Pad 1 + Pad 4 releases it). The mk2's RGB pads show each job's colour, painted by the board's colour message.
 - Timeline: right-click the Functions list to add a function at the playhead (on the picked track or a new one), open it, or make a new Scene/Chaser/Collection/RGB Matrix/EFX; a right-click on the blank track-header column works with the timeline scrolled sideways.
 - **A hazard bench show**: `test-workspaces/hazard-arming.qlcc` -- a CO2 jet (Hazard — Burst), a hazer (Hazard — Running) and a wash on the OLA probe's Art-Net 0:0:15, cues Preset, CO2 hit, Haze on, Haze off, Blackout, the desk's Hazard controls left to learn on the board; the jet and the hazer stand on the deck and the wash hangs on a front pipe at 16'; built and checked by the app's own engine in the gate.
 - **Footer icons and View ▸ Footer**: every footer chip has a small icon that says what it reports (bolt for power, clock for timecode, map pin for the venue, a cue glyph for the next cue, fader for the Grand Master, checklist for Review, controller board for surfaces, game controller for Pad, pencil for Edit Live, lamp for the selected fixtures, disk for Saved), with its name in the tooltip; a squeezed chip shrinks to its icon before it goes. **View ▸ Footer** ticks each chip on or off for this computer, **Reset Footer** puts them back; safety chips are always shown. The Design / Operate chip, the ADVANCED mark and the Desk chip while all is well are gone; STUDENT and a red *Desk not patched: Patch It* stay.
