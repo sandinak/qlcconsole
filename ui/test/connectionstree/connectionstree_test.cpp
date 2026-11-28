@@ -2168,6 +2168,10 @@ void ConnectionsTree_Test::retargetOffersTheVisiblePortsWithTheCurrentOne()
 void ConnectionsTree_Test::aBoardPatchedWhereAnotherWasTakesItsLampsWithIt()
 {
     IOPluginStub *stub = stubOf(m_doc);
+    /* The MIDI plugin, as on dink: hardware lines that send feedback. (A
+       plugin without them has no board to send lamps to: feedbackLineFor().) */
+    stub->m_linesAreHardware = true;
+    stub->m_hasFeedback = true;
     stub->m_lineNames = QStringList({ "APC40 mkII", "Network RTP Session 1", "OpenDeck | PMJ_BLACK_1" });
     InputOutputMap *iom = m_doc->inputOutputMap();
     QVERIFY(iom->setInputPatch(0, stub->name(), QString(), 0));
