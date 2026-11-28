@@ -77,6 +77,7 @@ const QHash<QString, Row> &rows()
     { "PWR-11", { F::GoThere, tr("Tape off the bottom of the beam (Apply This Cut puts the suggested amount in the fixture's Masking), or aim the light so it stays out of the zone.") } },
     { "PWR-12", { F::GoThere, tr("Show Me the layer that lights the cyc: aim it off, shutter or darken it in this cue, or say I Meant It if the backwash is on purpose.") } },
     { "PWR-13", { F::GoThere, tr("Aim the laser out of the zone, or cut its output in the cues that put it inside. Safety: never changed for you.") } },
+    { "PWR-14", { F::GoThere, tr("Bring a light up on the acting area in this cue, or aim one there; if the dark is meant, say I Meant It. The Rig Overview's Light Map shows where the light falls.") } },
     { "TEACH-01", { F::Manual, tr("Teaching mode is a choice for the room: turn it off in Settings when the class is over. It is never switched off for you.") } },
     { "FILE-01", { F::GoThere, tr("Copy the media into the show's folder and re-link it, or save the show as .qlcc so it carries them.") } },
     { "FILE-02", { F::GoThere, tr("Find the missing file and re-link it (the media list shows where the show looked), or remove the cue that plays it.") } },
