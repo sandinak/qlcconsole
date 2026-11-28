@@ -455,6 +455,34 @@ QString MeasurementUnits::formatSpeed(double metresPerSecond)
     return formatSpeed(metresPerSecond, preferredLength());
 }
 
+bool MeasurementUnits::illuminanceInFootCandles(LengthUnit unit)
+{
+    return isImperial(unit);
+}
+
+QString MeasurementUnits::illuminanceSymbol(LengthUnit unit)
+{
+    return illuminanceInFootCandles(unit) ? QStringLiteral("fc") : QStringLiteral("lx");
+}
+
+double MeasurementUnits::luxPer(LengthUnit unit)
+{
+    // A foot-candle is a lumen on a square foot: 1 / 0.3048^2 lux.
+    return illuminanceInFootCandles(unit) ? 1.0 / (0.3048 * 0.3048) : 1.0;
+}
+
+QString MeasurementUnits::formatIlluminance(double lux, LengthUnit unit)
+{
+    const double v = qMax(0.0, lux) / luxPer(unit);
+    const int d = (illuminanceInFootCandles(unit) && v < 100.0) ? 1 : 0;
+    return QStringLiteral("%1 %2").arg(number(roundTo(v, d), d), illuminanceSymbol(unit));
+}
+
+QString MeasurementUnits::formatIlluminance(double lux)
+{
+    return formatIlluminance(lux, preferredLength());
+}
+
 double MeasurementUnits::parseSpeed(const QString &text, LengthUnit unit, bool *ok)
 {
     QString t = text.trimmed();

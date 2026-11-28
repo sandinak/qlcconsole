@@ -177,6 +177,7 @@ add_library(${module_name}
     monitor/handprops.cpp monitor/handprops.h
     monitor/monitorgraphicsview_heldprops.cpp
     monitor/structurestudioview_heldprops.cpp
+    monitor/structurestudioview_lightmap.cpp
     palettegenerator.cpp palettegenerator.h
     playbackslider.cpp playbackslider.h
     pmjoverlay.cpp pmjoverlay.h

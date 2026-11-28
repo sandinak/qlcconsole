@@ -11,6 +11,7 @@ include(common/surfacesim/surfacesim.cmake)
 
 add_subdirectory(aimsolver)
 add_subdirectory(beamocclusion)
+add_subdirectory(lightmap)
 add_subdirectory(blindeffects)
 add_subdirectory(blocking)
 add_subdirectory(heldprops)

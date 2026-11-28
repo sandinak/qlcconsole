@@ -107,6 +107,7 @@ private slots:
     void pwr11BehindCyc();
     void pwr11BandedPan();
     void pwr12Backwash();
+    void pwr14DarkActingArea();
     void pwr12Meant();
     void pwr12WarnStates();
     void pwr12AimAtCyc();

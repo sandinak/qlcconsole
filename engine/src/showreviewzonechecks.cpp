@@ -27,6 +27,7 @@
 #include <QSet>
 #include <QtMath>
 #include <algorithm>
+#include <cmath>
 
 #include "showreviewcontext.h"
 #include "showtreecontroller.h"
@@ -34,6 +35,8 @@
 #include "programmercontroller.h"
 #include "nolightzone.h"
 #include "beamocclusion.h"
+#include "lightmap.h"
+#include "measurementunits.h"
 #include "stagetarget.h"
 #include "scenery.h"
 #include "qlcphysical.h"
@@ -65,6 +68,9 @@ const double kRange = 30.0;
 struct Beam
 {
     bool lit = false;
+    /** PWR-14: how far up it is, 0..1 (the highest dimmer a layer gives it;
+     *  a light with no dimmer and a colour set is full). */
+    double level = 0.0;
     bool hasPos = false;
     double pan = 0.5, tilt = 0.5;   //!< DMX fractions (value / 255)
     /** PWR-12: the layer whose look lit it (its cue, its id) ... */
@@ -123,11 +129,15 @@ QHash<quint32, Beam> beamsOf(ReviewContext &ctx, const ResolvedCue &cue,
                     const int v = look.none ? 0 : QLCPalette::lookDimmerValue(doc, look.palettes);
                     if (v > 0)
                         b.lit = true;
+                    b.level = qMax(b.level, v / 255.0);
                 }
             }
             else if (colIt != layer.values.constEnd() && !colIt.value().look.none
                      && !colIt.value().look.palettes.isEmpty())
+            {
                 b.lit = true;
+                b.level = 1.0;
+            }
             if (b.lit && !wasLit)
                 b.litBy = from;
             if (posIt != layer.values.constEnd() && !posIt.value().look.none)
@@ -170,6 +180,28 @@ double headFraction(const Fixture *fx, QLCChannel::Group group, double dmxFracti
     return Fixture::positionFraction(ch, dmxFraction * 255.0);
 }
 
+/** Which way a lit light throws in its cue (unit vector): a mover from its
+ *  resolved pan and tilt, anything fixed from where it throws. */
+bool beamDirOf(Doc *doc, Fixture *fx, const Beam &b, QVector3D &dir)
+{
+    MonitorProperties *mp = doc->monitorProperties();
+    if (isMover(fx))
+    {
+        const double panSpan = MoveSpeed::panSpanDeg(fx), tiltSpan = MoveSpeed::tiltSpanDeg(fx);
+        if (!AimSolver::beamDirection(mp->fixtureRigProps(fx->id()),
+                                      (headFraction(fx, QLCChannel::Pan, b.pan) - 0.5) * panSpan,
+                                      (headFraction(fx, QLCChannel::Tilt, b.tilt) - 0.5) * tiltSpan,
+                                      dir))
+            return false;
+    }
+    else if (!RigHeads::fixedThrow(doc, fx->id(), dir))
+        return false;
+    if (dir.isNull())
+        return false;
+    dir.normalize();
+    return true;
+}
+
 /** What raysOf() read, for a check that wants to suggest a cut of tape. */
 struct Throw
 {
@@ -188,20 +220,8 @@ bool raysOf(Doc *doc, Fixture *fx, const Beam &b, QVector3D &apex, QVector<QVect
     laser = isLaser(fx);
     const bool stars = phy.emission() == QLCPhysical::StarEmission;
     QVector3D dir;
-    if (isMover(fx))
-    {
-        const double panSpan = MoveSpeed::panSpanDeg(fx), tiltSpan = MoveSpeed::tiltSpanDeg(fx);
-        if (!AimSolver::beamDirection(mp->fixtureRigProps(fx->id()),
-                                      (headFraction(fx, QLCChannel::Pan, b.pan) - 0.5) * panSpan,
-                                      (headFraction(fx, QLCChannel::Tilt, b.tilt) - 0.5) * tiltSpan,
-                                      dir))
-            return false;
-    }
-    else if (!RigHeads::fixedThrow(doc, fx->id(), dir))
+    if (!beamDirOf(doc, fx, b, dir))
         return false;
-    if (dir.isNull())
-        return false;
-    dir.normalize();
     apex = RigHeads::fixtureCentre(doc, fx->id());
     const double declared = qMax(phy.lensDegreesMin(), phy.lensDegreesMax());
     if (info != nullptr)
@@ -959,6 +979,189 @@ void pwr12(ReviewContext &ctx, QList<ReviewFinding> &out)
     }
 }
 
+/* PWR-14: a cue that leaves an acting area dark. An acting area is a stage
+   target of kind Area (a region of deck: "DS centre", "the bench"), where the
+   cue's blocking puts it. Its footprint is sampled at subject height above
+   the deck there (MonitorProperties::lightMapHeight(), 5' 6") and the light
+   each lit fixture of the cue puts on each point added up (LightMap: its
+   lumens over its cone, the square of the distance, and nothing through what
+   is solid on stage, curtains where the cue leaves them). Dark when more than
+   half its points are under the show's dark level (lightMapDarkLux(), 10 fc).
+   A cue with nothing lit is a blackout, dark on purpose: never named.
+   decided (can change): named once, in the first cue of a run of cues it is
+   dark in (as PWR-11 names the cue a beam starts crossing a zone), with how
+   many cues after it it stays dark. */
+struct AreaLight
+{
+    bool dark = false;
+    double lux = 0.0;               //!< the mean over its points
+};
+
+AreaLight areaLight(MonitorProperties *mp, const StageTarget *t, quint32 set,
+                    const QVector<LightMap::Source> &sources, const BeamOcclusion::ModelPtr &sight)
+{
+    AreaLight a;
+    const QVector3D pos = mp->targetPosition(t, set);
+    const QSizeF fp = mp->targetFootprint(t, set);
+    const double w = qMax(0.0, fp.width()), d = qMax(0.0, fp.height());
+    const int nx = (w <= 0.0) ? 1 : qBound(2, int(std::ceil(w / 0.5)), 6);
+    const int ny = (d <= 0.0) ? 1 : qBound(2, int(std::ceil(d / 0.5)), 6);
+    const double height = double(mp->lightMapHeight());
+    const double darkLux = double(mp->lightMapDarkLux());
+    const BeamOcclusion::Model *model = (sight.isNull() || sight->isEmpty()) ? nullptr : sight.data();
+    int dark = 0;
+    double sum = 0.0;
+    for (int j = 0; j < ny; ++j)
+        for (int i = 0; i < nx; ++i)
+        {
+            // Inside its edge: a point on the line is half someone else's.
+            const float x = pos.x() + float(nx == 1 ? 0.0 : (double(i) / (nx - 1) - 0.5) * w * 0.8);
+            const float y = pos.y() + float(ny == 1 ? 0.0 : (double(j) / (ny - 1) - 0.5) * d * 0.8);
+            const QVector3D p(x, y, mp->platformHeightAt(x, y) + float(height));
+            const double lux = LightMap::luxAt(sources, model, p);
+            sum += lux;
+            if (lux < darkLux)
+                ++dark;
+        }
+    const int n = nx * ny;
+    a.lux = sum / n;
+    a.dark = dark * 2 > n;
+    return a;
+}
+
+void pwr14(ReviewContext &ctx, QList<ReviewFinding> &out)
+{
+    Doc *doc = ctx.doc();
+    MonitorProperties *mp = doc->monitorProperties();
+    ShowTreeController *st = doc->showTree();
+    if (mp == nullptr || st == nullptr)
+        return;
+    QList<const StageTarget *> areas;
+    for (const StageTarget *t : mp->stageTargets())
+        if (t != nullptr && t->kind() == StageTarget::Kind::Area)
+            areas << t;
+    if (areas.isEmpty())
+        return;
+    std::sort(areas.begin(), areas.end(), [](const StageTarget *a, const StageTarget *b) { return a->id() < b->id(); });
+    QList<const Scenery *> driven;
+    for (const Scenery *sc : mp->sceneries())
+    {
+        const Fixture *dfx = (sc != nullptr && sc->isDriven()) ? doc->fixture(sc->driverFixture()) : nullptr;
+        if (dfx != nullptr && dfx->fixtureMode() != nullptr)
+            driven << sc;
+    }
+    const double height = double(mp->lightMapHeight());
+    const double darkLux = double(mp->lightMapDarkLux());
+    QHash<QPair<quint32, quint32>, QList<SceneValue>> cache;
+
+    for (const Production &p : st->productions())
+    {
+        for (const CueList &list : p.lists)
+        {
+            if (list.looks || list.isSubCues())
+                continue;
+            const QList<ResolvedCue> &res = ctx.resolved(list);
+            if (res.count() != list.cues.count())
+                continue;
+            struct Run { int from = -1; int cues = 0; double lux = 0.0; QList<quint32> lit; };
+            QHash<quint32, Run> runs;       // area id -> the dark run it is in
+            auto flush = [&](const StageTarget *t) {
+                Run r = runs.take(t->id());
+                if (r.from < 0)
+                    return;
+                const Cue &cue = list.cues.at(r.from);
+                const QPointF at(double(t->x()), double(t->y()));
+                const QSizeF fp = t->footprint();
+                QByteArray print = QByteArray::number(qRound(at.x() * 100)) + ',' + QByteArray::number(qRound(at.y() * 100))
+                                   + ',' + QByteArray::number(qRound(fp.width() * 100)) + ','
+                                   + QByteArray::number(qRound(fp.height() * 100)) + ';'
+                                   + QByteArray::number(qRound(height * 100)) + ','
+                                   + QByteArray::number(qRound(darkLux)) + ';';
+                for (quint32 fid : r.lit)
+                    print += QByteArray::number(fid) + ',';
+                QString after;
+                if (r.cues > 1)
+                    after = (r.cues == 2) ? tr(" It stays dark for 1 more cue.")
+                                          : tr(" It stays dark for %1 more cues.").arg(r.cues - 1);
+                out << ReviewContext::make(QStringLiteral("PWR-14"), ReviewFinding::Warning,
+                    tr("In %1 the acting area '%2' is dark: about %3 at %4 up, under the %5 the show "
+                       "counts as lit.%6 Bring a light up on it or aim one there, or accept it if the "
+                       "dark is meant.")
+                        .arg(ctx.cueText(list, r.from), t->name(),
+                             MeasurementUnits::formatIlluminance(r.lux),
+                             MeasurementUnits::formatMetres(height),
+                             MeasurementUnits::formatIlluminance(darkLux), after),
+                    { QStringLiteral("list:%1/cue:%2").arg(list.id).arg(cue.id),
+                      QStringLiteral("target:%1").arg(t->id()) },
+                    print, QStringLiteral("cue"), QVariantList() << cue.id);
+            };
+            for (int i = 0; i < list.cues.count(); ++i)
+            {
+                const Cue &cue = list.cues.at(i);
+                if (cue.skip)
+                    continue;
+                const QHash<quint32, Beam> beams = beamsOf(ctx, res.at(i), cache);
+                QVector<LightMap::Source> sources;
+                QList<quint32> lit;
+                for (auto b = beams.constBegin(); b != beams.constEnd(); ++b)
+                {
+                    if (!b.value().lit || b.value().level <= 0.0)
+                        continue;
+                    Fixture *fx = doc->fixture(b.key());
+                    const QLCPhysical &phy = fx->fixtureMode()->physical();
+                    if (isLaser(fx) || phy.emission() == QLCPhysical::StarEmission)
+                        continue;               // a laser or a sky of stars lights nobody
+                    QVector3D dir;
+                    if (!beamDirOf(doc, fx, b.value(), dir))
+                        continue;
+                    LightMap::Source src = LightMap::makeSource(b.key(), RigHeads::fixtureCentre(doc, b.key()), dir,
+                                                                LightMap::beamDegrees(phy),
+                                                                LightMap::fixtureLumens(fx), b.value().level);
+                    src.exclude = BeamOcclusion::ownMounts(mp, b.key());
+                    sources << src;
+                    lit << b.key();
+                }
+                std::sort(lit.begin(), lit.end());
+                if (sources.isEmpty())
+                {
+                    // A blackout is dark on purpose: it ends a run, it isn't one.
+                    for (const StageTarget *t : areas)
+                        flush(t);
+                    continue;
+                }
+                const BeamOcclusion::ModelPtr sight = mp->occlusionModel(curtainPoses(doc, driven, res.at(i)));
+                quint32 set = st->cueBlocking(cue.id);
+                if (set == invalidId() || !mp->hasBlockingSet(set))
+                    set = 0;
+                for (const StageTarget *t : areas)
+                {
+                    if (!mp->targetOnStage(t, set))
+                    {
+                        flush(t);
+                        continue;
+                    }
+                    const AreaLight a = areaLight(mp, t, set, sources, sight);
+                    if (!a.dark)
+                    {
+                        flush(t);
+                        continue;
+                    }
+                    Run &r = runs[t->id()];
+                    if (r.from < 0)
+                    {
+                        r.from = i;
+                        r.lux = a.lux;
+                        r.lit = lit;
+                    }
+                    ++r.cues;
+                }
+            }
+            for (const StageTarget *t : areas)
+                flush(t);
+        }
+    }
+}
+
 }
 
 QList<ShowReview::Check> ShowReviewChecks::zoneChecks()
@@ -974,6 +1177,13 @@ QList<ShowReview::Check> ShowReviewChecks::zoneChecks()
           tr("A laser whose place on the plot is inside a zone marked as dark (the band, the "
              "orchestra pit, a camera). Whatever it throws starts in the zone. Show Me finds it "
              "on the plot; move the zone or the laser."), pwr13 },
+        { QStringLiteral("PWR-14"), tr("A cue leaves an acting area dark"), S::Power,
+          tr("An acting area on the plot (a stage target of kind Area) that a cue leaves dark at "
+             "subject height: the light its lit fixtures put on a person standing there, added up "
+             "from each one's output, beam and distance and stopped by anything solid in the way, "
+             "is under the level the show counts as lit (the Rig Overview's Light Map: Dark under). "
+             "Named in the first cue of a run of cues it is dark in. A blackout "
+             "(nothing lit) is never named. Light it, or accept it when the dark is meant."), pwr14 },
         { QStringLiteral("PWR-12"), tr("Light on the cyc nobody meant (backwash)"), S::Power,
           tr("Light that lands on a cyc or a scrim (or any scenery set to take light only on "
              "purpose) by accident: a front light or a special at a performer that carries on and "

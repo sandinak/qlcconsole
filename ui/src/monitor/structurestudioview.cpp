@@ -473,23 +473,11 @@ void StructureStudioView::setHaze(double level)
 
 double StructureStudioView::fixtureOutput(Fixture *fx, bool *known) const
 {
-    if (known != nullptr)
-        *known = false;
     /* "are we gauging the luminosity based on the actual devices" -- we were
        not: a 10-lumen WS2812 step strip threw the light of a 180 W bar, and
-       ninety-six of them washed the floor white. */
-    if (fx == nullptr || fx->fixtureMode() == nullptr)
-        return 1.0;
-    const QLCPhysical &phys = fx->fixtureMode()->physical();
-    static const double referenceLumens = 3500.0;     // a 100 W LED fixture
-    static const double lumensPerWatt = 35.0;         // LED, after its optics
-    if (known != nullptr)
-        *known = phys.declaresOutput();
-    if (phys.bulbLumens() > 0)
-        return phys.bulbLumens() / referenceLumens;
-    if (phys.powerConsumption() > 0)
-        return phys.powerConsumption() * lumensPerWatt / referenceLumens;
-    return 1.0;
+       ninety-six of them washed the floor white. The lumens are the light
+       map's own (LightMap::fixtureLumens()): one figure for both. */
+    return LightMap::fixtureLumens(fx, known) / LightMap::referenceLumens();
 }
 
 QColor StructureStudioView::gelled(const QColor &light, const QColor &gel)
@@ -1882,6 +1870,8 @@ void StructureStudioView::drawStageFigures(QPainter &p) const
 
 void StructureStudioView::rigMayHaveMoved()
 {
+    if (m_lightMapOn)
+        requestLightMap();
     m_ownerKeptValid = false;
     m_floorPointsAge.invalidate();
     m_overlapAge.invalidate();
@@ -3094,6 +3084,8 @@ void StructureStudioView::flushOps(QPainter &p) const
 
 StructureStudioView::~StructureStudioView()
 {
+    if (m_lightCancel)
+        m_lightCancel->store(true);    // a light map being worked out: let it go
     delete m_z;
     delete m_gpu;
 }
@@ -11135,6 +11127,8 @@ bool StructureStudioView::liveTick()
         return false;            // not on screen: nothing anyone would see
     if (!liveInputsChanged())
         return false;            // the same picture as the last frame
+    if (m_lightMapOn)
+        requestLightMap();       // the lights moved: the map follows, off the GUI thread
     /* The overlap warnings and the floor points are kept half a second
        (rebuildOverlapWarnings(), floorPoints()): an edit drawn within that
        gets one more frame once they have caught up -- one, not a stream. */
@@ -11292,6 +11286,8 @@ void StructureStudioView::paintEvent(QPaintEvent *)
             drawChildBars(p, m_id);
         drawRotateHandle(p);    // on top of everything it might overlap
     }
+    if (m_lightMapOn)
+        drawLightMap(p);  // over the rig, under the marks: read like a plot's overlay
     drawStageMarks(p);   // on top: a reference is read through the rig
     drawOperatorMark(p);
     drawTargetPositions(p);

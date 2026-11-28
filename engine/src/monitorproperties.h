@@ -204,6 +204,15 @@ public:
     inline void setAimSubjectHeight(float metres) { m_aimSubjectHeight = metres; }
     inline float aimSubjectHeight() const { return m_aimSubjectHeight; }
 
+    /** The light map (the Rig Overview, Show Review's PWR-14): how high a
+     *  person's face is above the deck, metres (LightMap::defaultHeight(),
+     *  5' 6"), and below how many lux a place reads as dark
+     *  (LightMap::defaultDarkLux(), 10 fc). Saved with the show. */
+    inline void setLightMapHeight(float metres) { m_lightMapHeight = qBound(0.1f, metres, 10.0f); }
+    inline float lightMapHeight() const { return m_lightMapHeight; }
+    inline void setLightMapDarkLux(float lux) { m_lightMapDarkLux = qBound(0.1f, lux, 100000.0f); }
+    inline float lightMapDarkLux() const { return m_lightMapDarkLux; }
+
     /** Line of sight: which stage features stand in a beam's way
      *  (BeamOcclusion::Kind flags), and how thick a truss, pipe or stand must
      *  be (metres) before it counts. Only read where line of sight is asked
@@ -514,6 +523,8 @@ private:
     bool m_targetPositionsVisible = true;
     int m_occlusionKinds = BeamOcclusion::defaultKinds();
     float m_occlusionMinSize = BeamOcclusion::defaultMinSize();
+    float m_lightMapHeight = float(66.0 * 0.0254);        // 5' 6"
+    float m_lightMapDarkLux = float(10.0 / (0.3048 * 0.3048)); // 10 fc
     mutable BeamOcclusion::Cache m_occlusion;
 
     /********************************************************************

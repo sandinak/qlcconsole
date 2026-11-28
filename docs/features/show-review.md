@@ -467,6 +467,18 @@ both give the same answer.
   A closed curtain in front of the cyc (where that cue leaves it) takes the
   light. Every cue it lands in is marked **⚠ cyc** in the Show Tree (**cyc ✓** in green on the cue where it is meant). See [Light on
   the cyc only on purpose](lighting-studio.md#light-on-the-cyc-only-on-purpose).
+- **PWR-14** A **cue that leaves an acting area dark**. An acting area is a
+  stage target of kind **Area**, where that cue's blocking puts it. The light
+  its lit fixtures put on a person standing there (at the Rig Overview's
+  **Light Map** subject height, 5' 6" unless you change it) is added up from
+  each one's output, beam and distance, and stopped by anything solid in the
+  way, curtains as the cue leaves them. When more than half the area is under
+  **Dark under** (10 fc unless you change it) the cue gets a warning that
+  names the area, about how much light it gets, and how many cues after it it
+  stays dark: it is named once, in the first cue of the run. A blackout (no
+  light up) is never named. Bring a light up or aim one there, or accept it
+  with a note when the dark is meant. See
+  [Light map](lighting-studio.md#light-map-the-light-on-a-person).
 
 **Files and names**
 

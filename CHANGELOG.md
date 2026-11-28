@@ -232,6 +232,12 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   every universe sent every frame, the Rig Overview and plot, memory and
   Open/Save to measured budgets. It found two crashes at quit with the Rig
   Overview open (WLED lanterns patched; any show's features), now fixed.
+- **Light map at subject height**: Rig Overview ▸ Light Map shows how much
+  light reaches a person standing on the stage (5' 6" unless you change it)
+  as a heat map in the Top and Angled views, from each lit fixture's lumens,
+  beam and distance and stopped by walls and drapes, with the dark spots
+  (under 10 fc unless you change it) outlined; Show Review's new PWR-14 warns
+  of a cue that leaves an acting area dark.
 
 ### Changed
 
