@@ -1054,8 +1054,10 @@ private:
     /** groups whose Flash is held, and the layer it writes on */
     QSet<quint32> m_flashHeld;
     OutputLayer *m_flashLayer = nullptr;
-    /** each fader job's pick-up (control key) */
+    /** each fader job's pick-up (control key), and the job it picks up for
+     *  (type << 32 | id): another job on the control starts over */
     QHash<quint64, FaderPickup> m_pickups;
+    QHash<quint64, quint64> m_pickupJob;
     /** the Effect size fader's last level, 0..255 (255: as made) */
     int m_effectSize = 255;
 };

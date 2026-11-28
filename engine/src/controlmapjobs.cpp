@@ -401,8 +401,20 @@ void ControlMap::releaseJob(const Binding &b)
 void ControlMap::faderJob(const Binding &b, uchar value)
 {
     const quint64 k = key(b.universe, b.channel);
+    /* A board just back sends where its faders are: its dump, not a hand
+       (as the Grand Master's pick-up, Q316). Nothing moves. */
+    auto back = m_backAt.constFind(b.universe);
+    if (back != m_backAt.constEnd() && back->elapsed() < m_dumpWindowMs)
+        return;
     FaderPickup &pick = m_pickups[k];
     pick.setSource(b.universe, b.channel);
+    // The control given another job is another fader: picked up again.
+    const quint64 job = (quint64(b.target.type) << 32) | b.target.id;
+    if (m_pickupJob.value(k, ~quint64(0)) != job)
+    {
+        pick.reset();
+        m_pickupJob.insert(k, job);
+    }
     int current = -1;
     switch (b.target.type)
     {
@@ -411,11 +423,17 @@ void ControlMap::faderJob(const Binding &b, uchar value)
             FixtureGroup *g = m_doc->fixtureGroup(b.target.id);
             if (g == nullptr)
                 return;
-            // A group master is a master (Q313): it follows its fader at once.
-            pick.setMaster(true);
+            /* A fader parked at the bottom while the group is up must not
+               black it out on the first brush (Q316's rule for the Grand
+               Master): it is picked up first. All the way down is the safe
+               way, and is taken at once. */
             current = g->masterLevel();
-            if (pick.accept(value, current))
+            if (value == 0 || pick.accept(value, current))
+            {
+                if (value == 0)
+                    pick.accept(value, value);  // where it is now: followed from here
                 g->setMasterLevel(value);
+            }
             break;
         }
         case EffectSpeedTarget:

@@ -1359,7 +1359,9 @@ void SurfaceMap_Test::everyBoardJobFiresFromTheBoard()
     QVERIFY(maps.applyJob(0, kSpeed, QStringLiteral("speed:0")));
     QVERIFY(maps.applyJob(0, kSize, QStringLiteral("size")));
     QVERIFY(show.front->hasMaster());
-    // A group's level: a master follows its fader at once.
+    // A group's level: picked up at the group's (full), then it follows.
+    QVERIFY(apc.set(key(kLevel), 127));
+    settle();
     QVERIFY(apc.set(key(kLevel), 64));
     settle();
     QVERIFY2(qAbs(int(show.front->masterLevel()) - 128) <= 2, qPrintable(QString::number(show.front->masterLevel())));
@@ -1492,6 +1494,45 @@ void SurfaceMap_Test::aGuardedJobOnTheShiftKeyNeverFires()
     settle();
     QVERIFY2(!m_doc->inputOutputMap()->blackout(), "the Shift key alone made a blackout");
     QCOMPARE(cm->lamp(cm->bindingsOn(0, 226).first()), ControlMap::LampOff);
+}
+
+void SurfaceMap_Test::aGroupLevelFaderPicksUpFirst()
+{
+    SimMidiDevice apc(m_doc, m_stub, QStringLiteral("APC40 mkII"), 0, kApc, profile("Akai-APC40-mkII.qxi"));
+    QVERIFY2(apc.plug(), qPrintable(apc.lastError()));
+    const JobShow show = jobShow(m_doc);
+    ControlMap *cm = m_doc->controlMap();
+    cm->setDumpWindowMs(0);
+    // A master used once, then turned off: its old level is not the group's now.
+    show.front->setMaster(true);
+    show.front->setMasterLevel(40);
+    show.front->setMaster(false);
+    m_doc->setMode(Doc::Operate);
+    settle();
+    const quint32 kLevel = 4103;
+    cm->setBinding({ 0, kLevel, ControlMap::job(ControlMap::GroupLevelTarget, show.front->id()),
+                     ControlMap::StartOnly });
+    settle();
+    QVERIFY(show.front->hasMaster());
+    QVERIFY2(show.front->masterLevel() == 255, "giving the job moved the group");
+    const QString fader = QStringLiteral("#%1").arg(kLevel);
+    // A fader parked at the bottom, brushed: the group stays at full.
+    QVERIFY(apc.set(fader, 1));
+    settle();
+    QVERIFY2(show.front->masterLevel() == 255, qPrintable(QString::number(show.front->masterLevel())));
+    // Brought up to the group, it is picked up and follows, both ways.
+    QVERIFY(apc.set(fader, 127));
+    settle();
+    QVERIFY(apc.set(fader, 64));
+    settle();
+    QVERIFY2(qAbs(int(show.front->masterLevel()) - 128) <= 2, qPrintable(QString::number(show.front->masterLevel())));
+    // The board goes away and comes back with the fader elsewhere: it waits again.
+    cm->setDumpWindowMs(500);
+    QVERIFY(apc.unplug());
+    settle();
+    QVERIFY(apc.replug({ { fader, 0 } }));
+    settle();
+    QVERIFY2(qAbs(int(show.front->masterLevel()) - 128) <= 2, "a replug's dump moved the group");
 }
 
 void SurfaceMap_Test::theBoardJobsRoundTripThroughTheShowFile()

@@ -470,7 +470,7 @@ a click opens its map.
 | On a fader | What it does |
 |---|---|
 | **Grand Master** | The Grand Master (this computer's desk). |
-| **A Group's Level ▸ N** | Group N's master: its lights scaled by the fader, as the Grand Master scales everything. Giving the job turns the group's master on. It follows the fader at once, as any master does. |
+| **A Group's Level ▸ N** | Group N's master: its lights scaled by the fader, as the Grand Master scales everything. Giving the job turns the group's master on, at full, so nothing changes until you move the fader. It waits to be picked up: bring the fader to the group's level (the footer says where) and it follows. All the way down is always taken at once. A board that has just come back does not move it. |
 | **Effect Speed ▸ N** | Speed master N's rate: the middle is the tempo as set, the top twice it, the bottom stopped. It waits to be picked up: until the fader reaches the rate, the footer says where to move it. |
 | **Effect Size** | How far every playing effect goes over what is under it: the top as made, half way half as far, the bottom none. Picked up at the top (where it starts). Not saved: it is the fader's place. |
 

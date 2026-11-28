@@ -193,11 +193,16 @@ void ControlMap::setBinding(const Binding &in, bool stepThrough)
     // A job acts one way only (modesFor()).
     if (isJobType(b.target.type) && !modesFor(b.target.type).contains(b.mode))
         b.mode = modesFor(b.target.type).first();
-    // A group's level fader is its group master: the group gets one.
+    /* A group's level fader is its group master: the group gets one, at
+       full, where the group is now (a level left from a master used before
+       would move it: no jump on giving the job). */
     if (b.target.type == GroupLevelTarget)
         if (FixtureGroup *g = m_doc->fixtureGroup(b.target.id))
             if (!g->hasMaster())
+            {
+                g->setMasterLevel(UCHAR_MAX);
                 g->setMaster(true);
+            }
     if (b.place.scope != Everywhere && b.place.scope != NewerPlace && b.place.id == 0xFFFFFFFF)
         b.place = Place();
     if (m_bindings.contains(b))
@@ -331,6 +336,7 @@ void ControlMap::reset()
         flashGroup(g, false);
     m_shiftDown.clear();
     m_pickups.clear();
+    m_pickupJob.clear();
     m_effectSize = 255;
     if (m_doc->effectScriptRunner() != nullptr)
         m_doc->effectScriptRunner()->setSizeMaster(1.0f);
@@ -1249,6 +1255,10 @@ void ControlMap::slotInputDeviceChanged(quint32 universe)
     // on it now, never one held as the cable went.
     if (m_shiftDown.remove(universe))
         slotLampsMayHaveChanged();
+    // Its faders: where they are is not known any more (picked up again).
+    for (auto it = m_pickups.begin(); it != m_pickups.end(); ++it)
+        if (quint32(it.key() >> 32) == universe)
+            it->reset();
     for (const quint64 k : m_swallow.values())
         if (quint32(k >> 32) == universe)
             endSwallow(k);
@@ -1272,6 +1282,9 @@ void ControlMap::slotInputDeviceBack(quint32 universe)
 {
     m_backAt[universe].start();
     m_shiftDown.remove(universe);       // as slotInputDeviceChanged()
+    for (auto it = m_pickups.begin(); it != m_pickups.end(); ++it)
+        if (quint32(it.key() >> 32) == universe)
+            it->reset();
     for (const quint64 k : m_backHeard.values())
         if (quint32(k >> 32) == universe)
             m_backHeard.remove(k);
