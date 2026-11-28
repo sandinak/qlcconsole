@@ -1198,13 +1198,7 @@ void SurfaceSim_Test::theLpd8sSeedTheirDefaultsAndGuardTheStop()
     QVERIFY(m_doc->outputRuleKeeper()->emergencyStopped());
     QCOMPARE(refused.last().first().toString(),
              QStringLiteral("%1: stopped. Pad 1 + Pad 4 releases the stop.").arg(layout.shortName()));
-    // K1: the Grand Master (picked up at the master, then followed).
-    InputOutputMap *iom = m_doc->inputOutputMap();
-    iom->setGrandMasterValue(255);
-    for (int v : { 120, 124, 127, 110, 90, 64 })
-        QVERIFY(lpd.set(QStringLiteral("#%1").arg(k1), v));
-    settle();
-    QCOMPARE(int(iom->grandMasterValue()), 128);
+    // K1 moving the master is the virtual bench's (theLpd8Mk2PadsReachTheirJobs): past the plug's dump window.
 }
 
 void SurfaceSim_Test::theLpd8Mk2PadsArePaintedBySysEx()
