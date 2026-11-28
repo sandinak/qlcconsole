@@ -5521,7 +5521,12 @@ void App::fitStatusBar()
         return;
     const QList<QWidget *> chips = statusChipsByPriority();
     const int gap = 6;                  // QStatusBar's spacing between items
-    int room = sb->width() - 2 * gap;
+    /* The window's width, not the bar's: a bar held wider than the window by
+       its chips' minimums (a window made narrower, a tab detached) is never
+       resized down to it, so measured by itself every chip still "fit" and
+       nothing was squeezed -- the footer stuck at 1073 px in a 900 px
+       window (viewlayout, CI 2026-11-27). */
+    int room = qMin(sb->width(), width()) - 2 * gap;
     // What is not on the list (the Run controls, the spacers, the size grip)
     // keeps its place.
     for (QWidget *w : sb->findChildren<QWidget *>(QString(), Qt::FindDirectChildrenOnly))
