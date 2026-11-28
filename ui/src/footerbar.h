@@ -21,7 +21,6 @@
 #define FOOTERBAR_H
 
 #include <QStatusBar>
-#include <QPointer>
 #include <QList>
 #include "qlcui_export.h"
 
@@ -62,11 +61,11 @@ protected:
 private:
     void showText(const QString &text);
     void place();
+    /** The permanent chips (addPermanentWidget()), shown or not. */
+    QList<QWidget *> permanentChips() const;
 
     QLabel *m_label = nullptr;
     QString m_text;
-    /** The chips still shown when the message came: the permanent ones. */
-    QList<QPointer<QWidget>> m_permanent;
 };
 
 #endif

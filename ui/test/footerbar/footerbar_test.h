@@ -36,6 +36,10 @@ private slots:
     /** A left-hand chip shown again while a message stands stays under the
      *  message's own label (it is not drawn over the words). */
     void aChipShownDuringAMessageIsNotDrawnOverIt();
+    /** A permanent chip shown while a message stands (Edit Live on going to
+     *  Operate) is not covered: the message stops short of it, and a click
+     *  on it reaches it. */
+    void aPermanentChipShownDuringAMessageTakesItsClick();
     /** A long message is cut short with an ellipsis, the whole in its tooltip. */
     void aLongMessageIsElided();
 };

@@ -119,6 +119,31 @@ void FooterBar_Test::aChipShownDuringAMessageIsNotDrawnOverIt()
     QCOMPARE(w.bar->childAt(inChip), static_cast<QWidget *>(msg));
 }
 
+void FooterBar_Test::aPermanentChipShownDuringAMessageTakesItsClick()
+{
+    Window w;
+    QLabel *late = new QLabel(QStringLiteral("Edit Live · Standard"), w.bar);
+    late->setObjectName(QStringLiteral("lateChip"));
+    w.bar->insertPermanentWidget(0, late);
+    late->hide();
+    QCoreApplication::processEvents();
+    w.bar->showMessage(QStringLiteral("This show was saved on Functions, which is at the Standard level."));
+    QCoreApplication::processEvents();
+    late->show();                           // Operate shows it, the message still up
+    QCoreApplication::processEvents();
+    const QPoint inChip = late->mapTo(w.bar, late->rect().center());
+    QCOMPARE(w.bar->childAt(inChip), static_cast<QWidget *>(late));
+    QLabel *msg = w.shownMessages().value(0);
+    QVERIFY(msg != nullptr);
+    QVERIFY(!msg->geometry().intersects(inBar(late, w.bar)));
+    // The normal chip shown again meanwhile is still under the message.
+    w.normal->show();
+    QCoreApplication::processEvents();
+    msg = w.shownMessages().value(0);
+    QVERIFY(msg != nullptr);
+    QCOMPARE(w.bar->childAt(w.normal->mapTo(w.bar, w.normal->rect().center())), static_cast<QWidget *>(msg));
+}
+
 void FooterBar_Test::aLongMessageIsElided()
 {
     Window w;
