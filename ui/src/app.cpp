@@ -9426,8 +9426,15 @@ void App::openBoardLog(quint32 universe, bool lampTest)
 void App::initStatusBar()
 {
     // One message at a time, never drawn under or over a chip (FooterBar).
-    if (qobject_cast<FooterBar *>(statusBar()) == nullptr)
+    if (QStatusBar *old = statusBar(); qobject_cast<FooterBar *>(old) == nullptr)
+    {
         setStatusBar(new FooterBar(this));
+        /* Gone now, not later: QMainWindow only hides it and deletes it on
+           a later turn, and until then the layout checks found the hidden
+           old bar first and saw the central area stop short of nothing (a
+           false "stuck mid-drag" self-heal at start-up, viewlayout). */
+        delete old;
+    }
     QStatusBar* sb = statusBar();
     m_statusFitTimer = new QTimer(this);
     m_statusFitTimer->setSingleShot(true);

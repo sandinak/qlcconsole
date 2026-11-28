@@ -357,7 +357,11 @@ QString LayoutDiagnostics::mainLayoutProblem(const QMainWindow *mw)
 {
     if (mw == nullptr)
         return QString();
-    const QStatusBar *sb = mw->findChild<QStatusBar *>(QString(), Qt::FindDirectChildrenOnly);
+    // The window's bar: a replaced one may linger hidden until it is deleted.
+    const QStatusBar *sb = nullptr;
+    for (const QStatusBar *b : mw->findChildren<QStatusBar *>(QString(), Qt::FindDirectChildrenOnly))
+        if (sb == nullptr || (b->isVisible() && !sb->isVisible()))
+            sb = b;
     const bool hasBar = sb != nullptr && sb->isVisible();
     if (hasBar && (sb->geometry().bottom() != mw->height() - 1 || sb->width() != mw->width()))
         return QStringLiteral("the status bar is %1 in a %2 window").arg(rect(sb->geometry()), sz(mw->size()));
