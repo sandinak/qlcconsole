@@ -88,7 +88,10 @@ ControlMap::ControlMap(Doc *doc)
     {
         connect(iom, &InputOutputMap::inputDeviceConnected, this, &ControlMap::slotInputDeviceBack);
         // A controller's setup gave the board's lights back: ours again.
-        connect(iom, &InputOutputMap::boardLampsReleased, this, &ControlMap::resendFeedback);
+        /* Only that board's: another board's lights are left as they are (the
+           PMJ's lamp test repainted the APC40's, virtual bench 2026-11-27). */
+        connect(iom, &InputOutputMap::boardLampsReleased, this,
+                [this](quint32 universe) { sendLamps(true, universe); });
         connect(iom, &InputOutputMap::inputDeviceDisconnected, this,
                 [this](quint32 universe) { m_backAt.remove(universe); });     // gone: no dump to wait for yet
     }
@@ -2650,7 +2653,7 @@ void ControlMap::sendControlLamp(quint32 universe, quint32 channel, bool force)
     sendLampValue(at, lampValueOn(*owner, now), force);
 }
 
-void ControlMap::sendLamps(bool force)
+void ControlMap::sendLamps(bool force, quint32 onlyUniverse)
 {
     refreshDeskTargets();
     QSet<quint64> done;
@@ -2658,6 +2661,8 @@ void ControlMap::sendLamps(bool force)
     const QList<Binding> all = m_deskLamps + m_bindings;
     for (const Binding &b : all)
     {
+        if (onlyUniverse != UINT_MAX && b.universe != onlyUniverse)
+            continue;       // another board's lights are not this one's to send
         const quint64 k = key(b.universe, b.channel);
         if (done.contains(k))
             continue;       // one light per control

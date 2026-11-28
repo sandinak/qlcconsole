@@ -20,6 +20,7 @@
 #ifndef CONTROLMAP_H
 #define CONTROLMAP_H
 
+#include <climits>
 #include <QMultiHash>
 #include <QElapsedTimer>
 #include <QObject>
@@ -789,7 +790,7 @@ private:
     void sendLamp(const Binding &b, bool force = false);
     void sendLampValue(const Binding &b, uchar value, bool force);
     /** Every binding's light (sendLamp() each). */
-    void sendLamps(bool force);
+    void sendLamps(bool force, quint32 onlyUniverse = UINT_MAX);
     /** The light of a control that fires nothing any more: dark. */
     void darkenLamp(const Binding &b);
     /** One step of the held blink (on, off, on, off, then the truth). */
