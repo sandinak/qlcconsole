@@ -518,7 +518,8 @@ void PlotSheet::paintScaleBar(QPainter *p, const Layout &l) const
 void PlotSheet::paintSymbol(QPainter *p, const QRectF &cell, quint32 fid) const
 {
     MonitorGraphicsView *v = m_context.view;
-    MonitorFixtureItem *item = v != nullptr ? v->fixtureItemForId(fid) : nullptr;
+    // Through QGraphicsItem: the item's own overrides are protected.
+    QGraphicsItem *item = v != nullptr ? v->fixtureItemForId(fid) : nullptr;
     p->save();
     p->fillRect(cell, QColor(11, 11, 11));
     if (item != nullptr)
@@ -533,8 +534,7 @@ void PlotSheet::paintSymbol(QPainter *p, const QRectF &cell, quint32 fid) const
             p->translate(-br.center());
             QStyleOptionGraphicsItem opt;
             opt.exposedRect = br;
-            // Through QGraphicsItem: the item's own override is protected.
-            static_cast<QGraphicsItem *>(item)->paint(p, &opt, nullptr);
+            item->paint(p, &opt, nullptr);
         }
     }
     p->restore();
