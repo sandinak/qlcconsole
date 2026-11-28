@@ -819,6 +819,8 @@ public slots:
     void slotCaptureUndo();
     void slotCapturePendingChanged();
     void slotCaptureUndoStackChanged();
+    void slotCaptureUndoPerformed(const QString &summary);
+    void slotCaptureAutoStored(const QString &summary);
     /** Bring a view to the front by its tab label, wherever it lives: switch
      *  to its tab if it is docked, or raise its own window if it has been
      *  detached. */

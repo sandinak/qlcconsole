@@ -5518,6 +5518,17 @@ void App::slotLiveEditVirtualConsole()
     VirtualConsole::instance()->toggleLiveEdit();
 }
 
+void App::slotCaptureUndoPerformed(const QString &summary)
+{
+    setStatusMessage(summary);
+}
+
+void App::slotCaptureAutoStored(const QString &summary)
+{
+    setStatusMessage(summary);
+    slotCapturePendingChanged();
+}
+
 void App::slotCaptureLiveEdits(bool checked)
 {
     CaptureManager *cm = m_doc->captureManager();
@@ -5548,15 +5559,12 @@ void App::slotCaptureLiveEdits(bool checked)
                 this, &App::slotCaptureUndoStackChanged, Qt::UniqueConnection);
         connect(cm, &CaptureManager::changesApplied,
                 this, &App::slotCapturePendingChanged, Qt::UniqueConnection);
+        // Member slots: Qt::UniqueConnection takes no lambda (a Debug Qt
+        // asserts on it; a Release one connected again on every toggle).
         connect(cm, &CaptureManager::undoPerformed,
-                this, [this](const QString& summary) {
-            setStatusMessage(summary);
-        }, Qt::UniqueConnection);
+                this, &App::slotCaptureUndoPerformed, Qt::UniqueConnection);
         connect(cm, &CaptureManager::autoStored,
-                this, [this](const QString& summary) {
-            setStatusMessage(summary);
-            slotCapturePendingChanged();
-        }, Qt::UniqueConnection);
+                this, &App::slotCaptureAutoStored, Qt::UniqueConnection);
 
         m_captureStoreAction->setVisible(true);
         m_captureUndoAction->setVisible(true);
