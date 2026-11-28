@@ -29,7 +29,9 @@
 #include <QPair>
 #include <QHash>
 #include <QSet>
+#include <functional>
 
+#include "faderpickup.h"
 #include "qlcengine_export.h"
 
 class QXmlStreamReader;
@@ -37,6 +39,7 @@ class QXmlStreamWriter;
 class EncoderBank;
 class SurfacePages;
 class EditLive;
+class OutputLayer;
 class Chaser;
 class Doc;
 
@@ -59,6 +62,8 @@ class Doc;
 #define CONTROLMAP_HAS_PLACES 1
 /** ... and a Back on a cue list (CueListBackTarget, phase F). */
 #define CONTROLMAP_HAS_BACK 1
+/** ... and the board jobs (Sub GO, Blackout, Blind, Flash a group...: Q355). */
+#define CONTROLMAP_HAS_BOARD_JOBS 1
 
 /**
  * The Control Map: a MIDI note or CC, or an OSC message -- any control on
@@ -123,7 +128,30 @@ public:
         EmergencyStopTarget, //!< ALL OFF (id 0): the surface's emergency stop, one button
         /** A Show Tree cue list, by its id: Back (the cue before). A target
          *  of its own, so a GO and a Back on one list are two controls. */
-        CueListBackTarget
+        CueListBackTarget,
+
+        /* The board jobs (board Q355; docs/features/control-surfaces.md,
+           "What a control can do"): a control's job on the console, not a
+           thing of the show. The id is the job's number N where it has one
+           (a group, a speed master, seconds), else 0. Given from the map's
+           click (Connections ▸ Control surfaces), saved with the show. A
+           build before them skips them (an unknown Target). */
+        SubGoTarget,        //!< Sub GO on the Run tab's list (id 0)
+        /** Fade and stop: every function fades out over id seconds and
+         *  stops (FixtureRest::stopAll(), as the toolbar's Fade and stop).
+         *  Guarded: Shift held (isGuardedJob()). */
+        FadeStopTarget,
+        BlackoutTarget,     //!< Blackout on / off (id 0). Guarded
+        BlindTarget,        //!< Blind on / off, as the toolbar's Blind button (id 0)
+        FlashGroupTarget,   //!< fixture group id: its intensity at full while held
+        NextSongTarget,     //!< the Run tab's list: the next song's first cue on standby (id 0)
+        PreviousSongTarget, //!< ... the previous song's first cue on standby (id 0)
+        EditLiveStoreTarget,//!< Edit Live's Store: the trims kept in the cue's looks (id 0)
+        ClearSelectionTarget, //!< the fixtures selected in Build let go of (id 0). Guarded
+        TapTarget,          //!< tap speed master id (0-based): its tempo from the taps
+        GroupLevelTarget,   //!< a fader: fixture group id's master level (FixtureGroup::setMasterLevel())
+        EffectSpeedTarget,  //!< a fader: speed master id's rate (middle: as set, top: twice)
+        EffectSizeTarget    //!< a fader: how far every playing effect goes (EffectScriptRunner::setSizeMaster())
     };
 
     /** How a press acts. On a cue list or a cue, Toggle and Start only GO,
@@ -248,6 +276,22 @@ public:
     /** The emergency stop (ALL OFF through ShowControl::run(), the one path).
      *  Only one binding of it can exist. */
     static Target emergencyStop() { return Target{ EmergencyStopTarget, 0 }; }
+    /** A board job (Q355) with its number @a n (0: none). */
+    static Target job(TargetType type, quint32 n = 0) { return Target{ type, n }; }
+    /** Whether @a type is a board job (SubGoTarget and after). */
+    static bool isJobType(TargetType type) { return type >= SubGoTarget; }
+    /** A job that a fader does: it follows every value, never a press. */
+    static bool isFaderJob(TargetType type)
+    { return type == GroupLevelTarget || type == EffectSpeedTarget || type == EffectSizeTarget; }
+    /** A job that takes two controls (the operator rules: a dangerous job
+     *  is never one press): it fires only while the board's Shift is held
+     *  (SurfaceLayout::shiftChannel()), as Shift+STOP does. On a board with
+     *  no Shift it is not offered, and a press of one is refused. A
+     *  computer key: only with Shift in its keys. */
+    static bool isGuardedJob(TargetType type)
+    { return type == BlackoutTarget || type == FadeStopTarget || type == ClearSelectionTarget; }
+    /** Fade and stop's default time, seconds. */
+    static constexpr quint32 kDefaultFadeStopSeconds = 5;
 
     static Place everywhere() { return Place(); }
     static Place inProduction(quint32 id) { return Place{ ProductionPlace, id, QString(), QString() }; }
@@ -636,6 +680,28 @@ public:
     void setBlinkMs(int ms) { m_blinkMs = ms; }
     /** Whether the held blink is running on @a b now. */
     bool isBlinking(const Binding &b) const;
+    /** Blind, as the console's Blind button has it (a mute in Design, the
+     *  Blind view in Operate): the UI's toggle and whether it is on. With
+     *  none set (the engine alone, a test), Blind is the output mute
+     *  (InputOutputMap::setOutputInhibited()). */
+    void setBlindHandler(const std::function<void()> &toggle, const std::function<bool()> &isOn)
+    { m_blindToggle = toggle; m_blindOn = isOn; }
+    bool blindIsOn() const;
+    /** Whether the Shift key of the board on @a universe is held now (a
+     *  guarded job's second control). Heard only while a guarded job is
+     *  bound. */
+    bool isShiftHeld(quint32 universe) const { return m_shiftDown.contains(universe); }
+    /** The Shift key's channel on @a universe's board (its layout's), or
+     *  invalid when it has none. */
+    quint32 shiftChannelOf(quint32 universe) const;
+    /** Whether the Flash of group @a groupId is held now. */
+    bool isFlashing(quint32 groupId) const { return m_flashHeld.contains(groupId); }
+    /** The light pass, asked from outside (the Blind button toggled). */
+    void refreshLamps() { slotLampsMayHaveChanged(); }
+    /** The cue of the Run tab's list Next song (@a dir 1) or Previous song
+     *  (-1) puts on standby: its chaser's step, -1 when there is none. */
+    int songStep(int dir) const;
+
     /** This computer's desk's STOP, GO and Back where they are live, as
      *  this map lights them: the one lamp writer of every control (an
      *  overlay leaves them alone). The STOP's light is the show's stop's,
@@ -768,6 +834,23 @@ private:
     void release(const Binding &b);
     /** The emergency stop: ALL OFF through ShowControl::run() (never held). */
     void emergencyStop(const Binding &b, uchar value);
+    /** A board job's press (Q355): carried out, or refused and said why
+     *  (a guarded job without Shift). True when it did something its
+     *  release lets go of (a Flash). */
+    bool pressJob(const Binding &b);
+    void releaseJob(const Binding &b);
+    /** A fader job's value (every value, 0 too). */
+    void faderJob(const Binding &b, uchar value);
+    /** What a board job's light says (lamp()). */
+    Lamp jobLamp(const Binding &b) const;
+    /** The fader job on control @a k (null: none). */
+    const Binding *faderJobOn(quint64 k) const;
+    /** Flash group @a groupId at full (on) or let go. */
+    void flashGroup(quint32 groupId, bool on);
+    /** Every Flash let go of (the emergency stop) */
+    void dropFlashes();
+    /** Notes the board's Shift going down or up. */
+    void noteShift(quint32 universe, quint32 channel, uchar value);
     /** blocked(), said once per hold of control @a k */
     void say(quint64 k, const QString &why);
     /** listenForButton(): one control heard while learning. */
@@ -959,6 +1042,24 @@ private:
      *  function started or stopped, a GO, the arming, a tree edit) asks
      *  for one, and a whole batch of them is one pass. */
     bool m_lampsQueued = false;
+
+    /* Board jobs (Q355) */
+    std::function<void()> m_blindToggle;
+    std::function<bool()> m_blindOn;
+    /** universes whose board's Shift is held */
+    QSet<quint32> m_shiftDown;
+    /** bindings that need Shift, and fader jobs: counted at rebuild() */
+    int m_guardedJobs = 0;
+    int m_faderJobs = 0;
+    /** groups whose Flash is held, and the layer it writes on */
+    QSet<quint32> m_flashHeld;
+    OutputLayer *m_flashLayer = nullptr;
+    /** each fader job's pick-up (control key), and the job it picks up for
+     *  (type << 32 | id): another job on the control starts over */
+    QHash<quint64, FaderPickup> m_pickups;
+    QHash<quint64, quint64> m_pickupJob;
+    /** the Effect size fader's last level, 0..255 (255: as made) */
+    int m_effectSize = 255;
 };
 
 /** @} */

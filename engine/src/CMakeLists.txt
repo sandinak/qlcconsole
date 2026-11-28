@@ -30,7 +30,7 @@ add_library(${module_name} SHARED
     groupmasters.cpp groupmasters.h
     shutterautoopen.cpp shutterautoopen.h
     showwebaccess.cpp showwebaccess.h
-    controlmap.cpp controlmap.h
+    controlmap.cpp controlmap.h controlmapjobs.cpp
     deskrecord.cpp deskrecord.h
     surfacelayout.cpp surfacelayout.h
     opendecklink.cpp opendecklink.h

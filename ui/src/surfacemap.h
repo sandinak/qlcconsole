@@ -269,16 +269,28 @@ public:
     SurfaceControlTable *table(quint32 universe) const { return m_tables.value(universe); }
 
     /** The jobs a click on @p universe's control @p channel offers, as the
-     *  menu lists them (Q355): key, text. A button: GO, Back, STOP, Page ◀,
-     *  Page ▶ and one key per page; a fader: the Grand Master; each with
-     *  "other" (Assign to Control…) and "none" (No job). A knob or encoder
-     *  turns what the page says, so offers only those two. */
+     *  menu lists them (Q355): key, text. A button: GO, Back, STOP (this
+     *  computer's desk), the board jobs (Sub GO, Next / Previous song, Jump
+     *  to cue N, Flash group N, Tap N, Blind, Edit Live: Store, and with
+     *  Shift Blackout, Fade and stop and Clear the selection), Page ◀, Page ▶
+     *  and one key per page; a fader: the Grand Master, a group's level,
+     *  the effects' speed and size; each with "other" (Assign to Control…)
+     *  and "none" (No job). A knob or encoder turns what the page says, so
+     *  offers only those two. A job with an N lists its choices in a
+     *  submenu (@a group). */
     struct Job
     {
-        QString key;        //!< "go", "back", "stop", "gm", "page-prev", "page-next", "page:2", "other", "none"
+        /** "go", "back", "stop", "gm", "page-prev", "page-next", "page:2",
+         *  "subgo", "song-next", "song-prev", "cue:<cue id>", "flash:<group
+         *  id>", "tap:<master>", "blind", "store", "blackout",
+         *  "fadestop:<seconds>", "clear", "level:<group id>",
+         *  "speed:<master>", "size", "other", "none" */
+        QString key;
         QString text;
         bool checked = false;   //!< it is the control's job now
         bool enabled = true;
+        /** The submenu it is listed in (empty: the menu itself). */
+        QString group;
     };
     QList<Job> jobsFor(quint32 universe, quint32 channel) const;
     /** Give the control that job (the menu's click). Same models as the

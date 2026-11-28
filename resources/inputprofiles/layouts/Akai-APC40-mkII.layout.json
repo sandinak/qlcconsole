@@ -3,6 +3,7 @@
   "profile": "Akai APC40 mkII",
   "name": "APC40 mkII",
   "short": "APC40",
+  "shift": 226,
   "width": 13.16,
   "height": 7.89,
   "pages": [],

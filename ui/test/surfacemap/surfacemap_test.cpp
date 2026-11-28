@@ -78,6 +78,18 @@
 #include "qlcioplugin.h"
 #include "qlcfile.h"
 #include "scene.h"
+#include "fixture.h"
+#include "fixturegroup.h"
+#include "showtreecontroller.h"
+#include "showcontrol.h"
+#include "programmercontroller.h"
+#include "speedmasters.h"
+#include "effectscriptrunner.h"
+#include "universe.h"
+#include "chaser.h"
+#include <QBuffer>
+#include <QXmlStreamWriter>
+#include <QXmlStreamReader>
 #include "doc.h"
 #include <QTemporaryDir>
 #include <QRegularExpression>
@@ -884,7 +896,12 @@ void SurfaceMap_Test::aClickGivesAControlAJob()
     for (const char *k : { "go", "back", "stop", "page-prev", "page-next", "page:0", "other", "none" })
         QVERIFY2(keyJobs.contains(QLatin1String(k)), k);
     QVERIFY(!keyJobs.contains(QStringLiteral("gm")));
-    QCOMPARE(keys(fader2), QStringList({ QStringLiteral("gm"), QStringLiteral("other"), QStringLiteral("none") }));
+    // A fader: the Grand Master first, then the fader jobs (Q355), never a key's.
+    const QStringList faderJobs = keys(fader2);
+    QCOMPARE(faderJobs.first(), QStringLiteral("gm"));
+    QVERIFY(faderJobs.contains(QStringLiteral("size")));
+    QVERIFY(!faderJobs.contains(QStringLiteral("go")));
+    QCOMPARE(faderJobs.mid(faderJobs.size() - 2), QStringList({ QStringLiteral("other"), QStringLiteral("none") }));
     QCOMPARE(keys(knob1), QStringList({ QStringLiteral("other"), QStringLiteral("none") }));
     // The jobs now are ticked: PLAY is GO.
     bool playIsGo = false;
@@ -1041,6 +1058,645 @@ void SurfaceMap_Test::pagesHaveKeysTheMapChooses()
         pop->close();
     QTest::mouseClick(chip, Qt::LeftButton, Qt::NoModifier, QPoint(4, chip->height() / 2));
     QCOMPARE(asked.count(), 1);
+}
+
+namespace
+{
+/* A show for the board jobs (Q355): a dimmer in group "Front", the Run tab's
+   list with three songs (Opener 0.0.x, Song 1.0.x, Encore 2.0.1). */
+struct JobShow
+{
+    Fixture *dimmer = nullptr;
+    FixtureGroup *front = nullptr;
+    quint32 list = 0xFFFFFFFF;
+    QList<quint32> cues;
+};
+
+JobShow jobShow(Doc *doc)
+{
+    JobShow s;
+    s.dimmer = new Fixture(doc);
+    s.dimmer->setName(QStringLiteral("Dim"));
+    s.dimmer->setAddress(0);
+    s.dimmer->setUniverse(0);
+    s.dimmer->setChannels(1);
+    doc->addFixture(s.dimmer);
+    s.front = new FixtureGroup(doc);
+    s.front->setName(QStringLiteral("Front"));
+    doc->addFixtureGroup(s.front);
+    s.front->assignFixture(s.dimmer->id());
+    ShowTreeController *st = doc->showTree();
+    const quint32 prod = st->addProduction(QStringLiteral("Show"));
+    s.list = st->addCueList(prod, QStringLiteral("Main"));
+    st->setNumbering(prod, ShowTree::Numbering::ShowPartIteration);
+    s.cues << st->addSection(s.list, QStringLiteral("Opener"));    // 0.0.1
+    s.cues << st->addCue(s.list, 0, QStringLiteral("Walk-in"));    // 0.0.2
+    s.cues << st->addSection(s.list, QStringLiteral("Song"));      // 1.0.1
+    s.cues << st->addCue(s.list, 2, QStringLiteral("Verse"));      // 1.0.2
+    s.cues << st->addSection(s.list, QStringLiteral("Encore"));    // 2.0.1
+    doc->controlMap()->setRunTabList(s.list);
+    return s;
+}
+
+/* What the dimmer at @p address of universe 0 puts out, after a frame. */
+int outAt(Doc *doc, int address)
+{
+    QList<Universe *> ua = doc->inputOutputMap()->claimUniverses();
+    for (Universe *u : ua)
+        u->processFaders();
+    const QByteArray out = *ua.at(0)->postGMValues();
+    doc->inputOutputMap()->releaseUniverses(false);
+    return int(uchar(out.at(address)));
+}
+
+bool saidContains(const QSignalSpy &spy, const QString &text)
+{
+    for (const QList<QVariant> &args : spy)
+        if (args.at(0).toString().contains(text))
+            return true;
+    return false;
+}
+}
+
+void SurfaceMap_Test::theBoardJobsAreInThePicker()
+{
+    SimMidiDevice apc(m_doc, m_stub, QStringLiteral("APC40 mkII"), 0, kApc, profile("Akai-APC40-mkII.qxi"));
+    QVERIFY2(apc.plug(), qPrintable(apc.lastError()));
+    const JobShow show = jobShow(m_doc);
+    SurfaceMaps maps(m_doc);
+    settle();
+    auto job = [&maps](quint32 ch, const QString &key) {
+        for (const SurfaceMaps::Job &j : maps.jobsFor(0, ch))
+            if (j.key == key)
+                return j;
+        return SurfaceMaps::Job();
+    };
+    // A key: every button job, the N ones in their submenus; a fader its three.
+    for (const QString &k : { QStringLiteral("subgo"), QStringLiteral("song-next"), QStringLiteral("song-prev"),
+                              QStringLiteral("blind"), QStringLiteral("store"), QStringLiteral("blackout"),
+                              QStringLiteral("clear"), QStringLiteral("fadestop:5"), QStringLiteral("tap:0"),
+                              QStringLiteral("flash:%1").arg(show.front->id()),
+                              QStringLiteral("cue:%1").arg(show.cues.at(2)) })
+        QVERIFY2(!job(kClip11, k).key.isEmpty(), qPrintable(k));
+    QCOMPARE(job(kClip11, QStringLiteral("flash:%1").arg(show.front->id())).group, QStringLiteral("Flash a Group"));
+    QCOMPARE(job(kClip11, QStringLiteral("flash:%1").arg(show.front->id())).text, QStringLiteral("Front"));
+    QVERIFY2(job(kClip11, QStringLiteral("cue:%1").arg(show.cues.at(2))).text.startsWith(QStringLiteral("Cue 1.0.1")),
+             qPrintable(job(kClip11, QStringLiteral("cue:%1").arg(show.cues.at(2))).text));
+    // The APC40's Shift is a Shift: the guarded ones are offered, and say so.
+    QVERIFY(job(kClip11, QStringLiteral("blackout")).enabled);
+    QCOMPARE(job(kClip11, QStringLiteral("blackout")).text, QStringLiteral("Blackout (Shift+)"));
+    for (const QString &k : { QStringLiteral("level:%1").arg(show.front->id()), QStringLiteral("speed:0"),
+                              QStringLiteral("size") })
+        QVERIFY2(!job(4103, k).key.isEmpty(), qPrintable(k));
+    QVERIFY(job(4103, QStringLiteral("blackout")).key.isEmpty());
+    QVERIFY(job(kClip11, QStringLiteral("size")).key.isEmpty());
+
+    // The menu: the N jobs are submenus; one given is ticked, and its submenu names it.
+    QVERIFY(maps.applyJob(0, kClip11, QStringLiteral("flash:%1").arg(show.front->id())));
+    QVERIFY(job(kClip11, QStringLiteral("flash:%1").arg(show.front->id())).checked);
+    QCOMPARE(maps.view(0)->jobText(kClip11), QStringLiteral("Flash: Front"));
+    std::unique_ptr<QMenu> menu(maps.jobMenu(0, kClip11));
+    QVERIFY(menu != nullptr);
+    QStringList texts;
+    for (QAction *a : menu->actions())
+        texts << a->text();
+    QVERIFY2(texts.contains(QStringLiteral("Flash a Group: Front")), qPrintable(texts.join('|')));
+    QVERIFY(texts.contains(QStringLiteral("Sub GO")));
+    QVERIFY(texts.contains(QStringLiteral("Blackout (Shift+)")));
+
+    // A fader job takes a fader, a key job a key: refused with why.
+    QString why;
+    QVERIFY(!maps.applyJob(0, kClip12, QStringLiteral("size"), &why));
+    QVERIFY2(why.contains(QStringLiteral("fader")), qPrintable(why));
+    QVERIFY(!maps.applyJob(0, 4103, QStringLiteral("blackout"), &why));
+    // Shift itself is no Shift+ job's key.
+    QVERIFY(!maps.applyJob(0, 226, QStringLiteral("blackout"), &why));
+    QVERIFY2(why.contains(QStringLiteral("Shift")), qPrintable(why));
+
+    // One job per control: a key's desk role goes, and Undo brings it back.
+    DeskRecord *desk = m_doc->deskRecord();
+    QCOMPARE(desk->binding(DeskRecord::Go).channel, kPlay);
+    QVERIFY(maps.applyJob(0, kPlay, QStringLiteral("subgo")));
+    QVERIFY(!desk->binding(DeskRecord::Go).isSet());
+    QVERIFY(m_doc->controlMap()->binding(ControlMap::job(ControlMap::SubGoTarget)) != nullptr);
+    QVERIFY(maps.undoLast());
+    QCOMPARE(desk->binding(DeskRecord::Go).channel, kPlay);
+    QVERIFY(m_doc->controlMap()->binding(ControlMap::job(ControlMap::SubGoTarget)) == nullptr);
+    // A job moved to another control: Undo puts it back where it was.
+    QVERIFY(maps.applyJob(0, kClip12, QStringLiteral("flash:%1").arg(show.front->id())));
+    QCOMPARE(m_doc->controlMap()->binding(ControlMap::job(ControlMap::FlashGroupTarget, show.front->id()))->channel,
+             kClip12);
+    QVERIFY(maps.undoLast());
+    QCOMPARE(m_doc->controlMap()->binding(ControlMap::job(ControlMap::FlashGroupTarget, show.front->id()))->channel,
+             kClip11);
+}
+
+void SurfaceMap_Test::aBoardWithNoShiftHasNoShiftJobs()
+{
+    SimMidiDevice mini(m_doc, m_stub, QStringLiteral("APC mini mk2 Control"), 0, QStringLiteral("Akai APC Mini mk2"),
+                       profile("Akai-APCMini-mk2.qxi"));
+    QVERIFY2(mini.plug(), qPrintable(mini.lastError()));
+    SurfaceMaps maps(m_doc);
+    settle();
+    SurfaceMapView *mv = maps.view(0);
+    QVERIFY(mv != nullptr);
+    QCOMPARE(m_doc->controlMap()->shiftChannelOf(0), 0xFFFFFFFFu);
+    // Its first pad.
+    quint32 pad = 0xFFFFFFFF;
+    for (const SurfaceLayout::Control &c : mv->layout().controls())
+        if ((c.kind == SurfaceLayout::Pad || c.kind == SurfaceLayout::Button) && pad == 0xFFFFFFFF
+            && !m_doc->deskRecord()->isDeskControl(0, c.channel))
+            pad = c.channel;
+    QVERIFY(pad != 0xFFFFFFFF);
+    bool listed = false;
+    for (const SurfaceMaps::Job &j : maps.jobsFor(0, pad))
+        if (j.key == QLatin1String("blackout") || j.key == QLatin1String("clear") || j.key.startsWith(QLatin1String("fadestop")))
+        {
+            listed = true;
+            QVERIFY2(!j.enabled, qPrintable(j.key));
+            QVERIFY2(j.text.contains(QStringLiteral("Shift")) || j.group.contains(QStringLiteral("Shift")), qPrintable(j.text));
+        }
+    QVERIFY(listed);
+    QString why;
+    QVERIFY(!maps.applyJob(0, pad, QStringLiteral("blackout"), &why));
+    QVERIFY2(why.contains(QStringLiteral("two controls")), qPrintable(why));
+    QVERIFY(m_doc->controlMap()->binding(ControlMap::job(ControlMap::BlackoutTarget)) == nullptr);
+    // One loaded from a show anyway: dark, and a press is refused, saying why.
+    ControlMap *cm = m_doc->controlMap();
+    cm->setBinding({ 0, pad, ControlMap::job(ControlMap::BlackoutTarget), ControlMap::Toggle });
+    settle();
+    QCOMPARE(cm->lamp(cm->bindingsOn(0, pad).first()), ControlMap::LampOff);
+    QSignalSpy blocked(cm, &ControlMap::blocked);
+    m_doc->setMode(Doc::Operate);       // in Design the board's page may have the pad
+    settle();
+    QVERIFY(mini.tap(QStringLiteral("#%1").arg(pad)));
+    settle();
+    QVERIFY(!m_doc->inputOutputMap()->blackout());
+    QVERIFY2(saidContains(blocked, QStringLiteral("no Shift key")), "the refusal was not said");
+}
+
+void SurfaceMap_Test::everyBoardJobFiresFromTheBoard()
+{
+    SimMidiDevice apc(m_doc, m_stub, QStringLiteral("APC40 mkII"), 0, kApc, profile("Akai-APC40-mkII.qxi"));
+    QVERIFY2(apc.plug(), qPrintable(apc.lastError()));
+    const JobShow show = jobShow(m_doc);
+    SurfaceMaps maps(m_doc);
+    settle();
+    ControlMap *cm = m_doc->controlMap();
+    ShowControl *sc = m_doc->showControl();
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QSignalSpy blocked(cm, &ControlMap::blocked);
+    QSignalSpy fired(cm, &ControlMap::fired);
+    QSignalSpy handled(sc, &ShowControl::commandHandled);
+    auto key = [](quint32 ch) { return QStringLiteral("#%1").arg(ch); };
+    const QString shift = key(226);
+    auto shiftTap = [&](quint32 ch) {
+        QVERIFY(apc.press(shift));
+        settle();
+        QVERIFY(apc.tap(key(ch)));
+        settle();
+        QVERIFY(apc.release(shift));
+        settle();
+    };
+    // The keys in a row of the clip grid (none is a desk or page key).
+    const quint32 kBlackout = kClip11, kFade = kClip11 + 1, kClear = kClip11 + 2, kBlind = kClip11 + 3,
+                  kFlash = kClip11 + 4, kNext = kClip11 + 5, kPrev = kClip11 + 6, kSubGo = kClip11 + 7,
+                  kStore = 128 + 24, kTap = 128 + 25, kJump = 128 + 26;
+    const QList<QPair<quint32, QString>> jobs = {
+        { kBlackout, QStringLiteral("blackout") }, { kFade, QStringLiteral("fadestop:3") },
+        { kClear, QStringLiteral("clear") }, { kBlind, QStringLiteral("blind") },
+        { kFlash, QStringLiteral("flash:%1").arg(show.front->id()) }, { kNext, QStringLiteral("song-next") },
+        { kPrev, QStringLiteral("song-prev") }, { kSubGo, QStringLiteral("subgo") },
+        { kStore, QStringLiteral("store") }, { kTap, QStringLiteral("tap:0") },
+        { kJump, QStringLiteral("cue:%1").arg(show.cues.at(4)) } };
+    for (const auto &j : jobs)
+    {
+        QString why;
+        QVERIFY2(maps.applyJob(0, j.first, j.second, &why), qPrintable(j.second + QStringLiteral(": ") + why));
+    }
+    settle();
+    QCOMPARE(maps.view(0)->jobText(kBlackout), QStringLiteral("Shift+Blackout"));
+
+    // Blackout: one press alone does nothing and says so; Shift held, it goes on, then off.
+    QCOMPARE(cm->controlLamp(0, kBlackout), ControlMap::LampStandby);
+    QVERIFY(apc.tap(key(kBlackout)));
+    settle();
+    QVERIFY2(!iom->blackout(), "a single press made a blackout");
+    QVERIFY2(saidContains(blocked, QStringLiteral("hold Shift")), "the refusal was not said");
+    // Shift pressed and let go first is no Shift.
+    QVERIFY(apc.tap(shift));
+    QVERIFY(apc.tap(key(kBlackout)));
+    settle();
+    QVERIFY(!iom->blackout());
+    shiftTap(kBlackout);
+    QVERIFY2(iom->blackout(), "Shift+key made no blackout");
+    QTRY_COMPARE(cm->controlLamp(0, kBlackout), ControlMap::LampRunning);
+    shiftTap(kBlackout);
+    QVERIFY(!iom->blackout());
+
+    // Clear the selection: alone nothing, with Shift the selection goes.
+    m_doc->programmer()->setProgrammerSelection({ show.dimmer->id() });
+    settle();
+    QCOMPARE(cm->controlLamp(0, kClear), ControlMap::LampStandby);
+    QVERIFY(apc.tap(key(kClear)));
+    settle();
+    QCOMPARE(m_doc->programmer()->programmerSelection().size(), 1);
+    shiftTap(kClear);
+    QVERIFY(m_doc->programmer()->programmerSelection().isEmpty());
+    QTRY_COMPARE(cm->controlLamp(0, kClear), ControlMap::LampOff);
+
+    // Fade and stop: alone nothing; with Shift, the toolbar's Fade and stop.
+    fired.clear();
+    QVERIFY(apc.tap(key(kFade)));
+    settle();
+    QVERIFY(!saidContains(fired, QStringLiteral("Fade and stop")));
+    shiftTap(kFade);
+    QVERIFY2(saidContains(fired, QStringLiteral("over 3 s")), "Shift+key did not fade and stop");
+
+    // Blind: one press, on; again, off (no Shift: it never darkens a live show).
+    QVERIFY(apc.tap(key(kBlind)));
+    settle();
+    QVERIFY(cm->blindIsOn());
+    QTRY_COMPARE(cm->controlLamp(0, kBlind), ControlMap::LampRunning);
+    QVERIFY(apc.tap(key(kBlind)));
+    settle();
+    QVERIFY(!cm->blindIsOn());
+
+    // Flash a group: its dimmer at full while held, back when let go.
+    QCOMPARE(outAt(m_doc, 0), 0);
+    QVERIFY(apc.press(key(kFlash)));
+    settle();
+    QVERIFY(cm->isFlashing(show.front->id()));
+    QCOMPARE(outAt(m_doc, 0), 255);
+    QTRY_COMPARE(cm->controlLamp(0, kFlash), ControlMap::LampRunning);
+    QVERIFY(apc.release(key(kFlash)));
+    settle();
+    QVERIFY(!cm->isFlashing(show.front->id()));
+    QCOMPARE(outAt(m_doc, 0), 0);
+
+    // Next and Previous song: the song's first cue on standby, never played.
+    Chaser *chaser = qobject_cast<Chaser *>(m_doc->function(m_doc->showTree()->cueList(show.list)->chaser));
+    QVERIFY(chaser != nullptr);
+    QCOMPARE(chaser->stepsCount(), 5);
+    QCOMPARE(sc->standbyStep(chaser), 0);
+    QVERIFY(apc.tap(key(kNext)));
+    settle();
+    QCOMPARE(sc->standbyStep(chaser), 2);
+    QVERIFY(!chaser->isRunning());
+    QVERIFY(apc.tap(key(kNext)));
+    settle();
+    QCOMPARE(sc->standbyStep(chaser), 4);
+    QTRY_COMPARE(cm->controlLamp(0, kNext), ControlMap::LampOff);     // the last song: none after it
+    QVERIFY(apc.tap(key(kPrev)));
+    settle();
+    QCOMPARE(sc->standbyStep(chaser), 2);
+
+    // Sub GO: the one run path (here it says the list isn't playing).
+    handled.clear();
+    QVERIFY(apc.tap(key(kSubGo)));
+    settle();
+    QVERIFY2(saidContains(handled, QStringLiteral("SUB GO")), "Sub GO did not reach ShowControl");
+
+    // Jump to cue: GO that cue.
+    handled.clear();
+    QVERIFY(apc.tap(key(kJump)));
+    settle();
+    QVERIFY2(saidContains(handled, QStringLiteral("GO")), "the jump did not reach ShowControl");
+
+    // Edit Live's Store: Edit Live is off here, and it says so.
+    blocked.clear();
+    QVERIFY(apc.tap(key(kStore)));
+    settle();
+    QVERIFY2(saidContains(blocked, QStringLiteral("Edit Live")), "Store did not reach Edit Live");
+    QCOMPARE(cm->controlLamp(0, kStore), ControlMap::LampOff);
+
+    // Tap: three taps a quarter second apart are about 240 BPM.
+    SpeedMasters *sm = m_doc->speedMasters();
+    QVERIFY(qAbs(sm->bpm(0) - 120.0) < 1.0);
+    for (int i = 0; i < 3; ++i)
+    {
+        QVERIFY(apc.tap(key(kTap), 20));
+        settle();
+        QTest::qWait(230);
+    }
+    QVERIFY2(sm->bpm(0) > 160.0, qPrintable(QString::number(sm->bpm(0))));
+
+    // The faders, in Operate (in Design the Build page has them).
+    m_doc->setMode(Doc::Operate);
+    settle();
+    const quint32 kLevel = 4103, kSpeed = 8199, kSize = 12295;
+    QVERIFY(maps.applyJob(0, kLevel, QStringLiteral("level:%1").arg(show.front->id())));
+    QVERIFY(maps.applyJob(0, kSpeed, QStringLiteral("speed:0")));
+    QVERIFY(maps.applyJob(0, kSize, QStringLiteral("size")));
+    QVERIFY(show.front->hasMaster());
+    // A group's level: picked up at the group's (full), then it follows.
+    QVERIFY(apc.set(key(kLevel), 127));
+    settle();
+    QVERIFY(apc.set(key(kLevel), 64));
+    settle();
+    QVERIFY2(qAbs(int(show.front->masterLevel()) - 128) <= 2, qPrintable(QString::number(show.front->masterLevel())));
+    QVERIFY(apc.set(key(kLevel), 0));
+    settle();
+    QCOMPARE(int(show.front->masterLevel()), 0);
+    // The effects' speed: picked up at the middle (as set), the top twice it.
+    QVERIFY(apc.set(key(kSpeed), 64));
+    settle();
+    QVERIFY(apc.set(key(kSpeed), 127));
+    settle();
+    QVERIFY2(sm->rate(0) > 1.9, qPrintable(QString::number(sm->rate(0))));
+    // The effects' size: picked up at the top (as made), half way is half.
+    EffectScriptRunner *runner = m_doc->effectScriptRunner();
+    QVERIFY(runner != nullptr);
+    QVERIFY(apc.set(key(kSize), 127));
+    settle();
+    QVERIFY(apc.set(key(kSize), 64));
+    settle();
+    QVERIFY2(qAbs(runner->sizeMaster() - 0.5f) < 0.02f, qPrintable(QString::number(runner->sizeMaster())));
+    // The rate moved elsewhere (the screen): the fader at the top waits to be
+    // picked up, and says where to move it.
+    sm->setRate(0, 1.0);
+    blocked.clear();
+    QVERIFY(apc.set(key(kSpeed), 120));
+    settle();
+    QVERIFY2(qAbs(sm->rate(0) - 1.0) < 0.01, "the speed jumped to a fader that was somewhere else");
+    QVERIFY2(saidContains(blocked, QStringLiteral("50%")), "the pick-up was not said");
+}
+
+void SurfaceMap_Test::aFlashLeavesMachineryAlone()
+{
+    SimMidiDevice apc(m_doc, m_stub, QStringLiteral("APC40 mkII"), 0, kApc, profile("Akai-APC40-mkII.qxi"));
+    QVERIFY2(apc.plug(), qPrintable(apc.lastError()));
+    const JobShow show = jobShow(m_doc);
+    // In the group beside the dimmer: a kabuki drop, the house lights' relay,
+    // a curtain and a flame (each a one-channel dimmer, as often patched).
+    const QList<Fixture::Behaviour> kinds = { Fixture::OneShotBehaviour, Fixture::SwitchBehaviour,
+                                              Fixture::MachineryBehaviour, Fixture::HazardBurstBehaviour };
+    for (int i = 0; i < kinds.size(); ++i)
+    {
+        Fixture *f = new Fixture(m_doc);
+        f->setName(QStringLiteral("Thing %1").arg(i));
+        f->setAddress(quint32(i + 1));
+        f->setUniverse(0);
+        f->setChannels(1);
+        m_doc->addFixture(f);
+        f->setBehaviourSetting(kinds.at(i));
+        show.front->assignFixture(f->id());
+    }
+    ControlMap *cm = m_doc->controlMap();
+    cm->setBinding({ 0, kClip11, ControlMap::job(ControlMap::FlashGroupTarget, show.front->id()),
+                     ControlMap::Momentary });
+    m_doc->setMode(Doc::Operate);
+    settle();
+    QVERIFY(apc.press(QStringLiteral("#%1").arg(kClip11)));
+    settle();
+    QVERIFY(cm->isFlashing(show.front->id()));
+    QCOMPARE(outAt(m_doc, 0), 255);         // the light flashes
+    for (int i = 0; i < kinds.size(); ++i)
+        QVERIFY2(outAt(m_doc, i + 1) == 0, qPrintable(QStringLiteral("a Flash drove behaviour %1").arg(int(kinds.at(i)))));
+    QVERIFY(apc.release(QStringLiteral("#%1").arg(kClip11)));
+    settle();
+}
+
+void SurfaceMap_Test::theEmergencyStopEndsAFlash()
+{
+    SimMidiDevice apc(m_doc, m_stub, QStringLiteral("APC40 mkII"), 0, kApc, profile("Akai-APC40-mkII.qxi"));
+    QVERIFY2(apc.plug(), qPrintable(apc.lastError()));
+    const JobShow show = jobShow(m_doc);
+    ControlMap *cm = m_doc->controlMap();
+    cm->setBinding({ 0, kClip11, ControlMap::job(ControlMap::FlashGroupTarget, show.front->id()),
+                     ControlMap::Momentary });
+    m_doc->setMode(Doc::Operate);
+    settle();
+    const QString flash = QStringLiteral("#%1").arg(kClip11);
+    QVERIFY(apc.press(flash));
+    settle();
+    QCOMPARE(outAt(m_doc, 0), 255);
+    // ALL OFF while the key is still held: everything is off, the Flash too.
+    QVERIFY(m_doc->showControl()->allOff(ShowControl::RouteOther));
+    settle();
+    QCoreApplication::processEvents();
+    QVERIFY2(!cm->isFlashing(show.front->id()), "the Flash outlived the emergency stop");
+    QCOMPARE(outAt(m_doc, 0), 0);
+    // Its release lets go of nothing; a new press flashes again.
+    QVERIFY(apc.release(flash));
+    settle();
+    QCOMPARE(outAt(m_doc, 0), 0);
+    QVERIFY(apc.press(flash));
+    settle();
+    QCOMPARE(outAt(m_doc, 0), 255);
+    QVERIFY(apc.release(flash));
+    settle();
+}
+
+void SurfaceMap_Test::aShiftHeldAcrossAReplugIsNoShift()
+{
+    SimMidiDevice apc(m_doc, m_stub, QStringLiteral("APC40 mkII"), 0, kApc, profile("Akai-APC40-mkII.qxi"));
+    QVERIFY2(apc.plug(), qPrintable(apc.lastError()));
+    ControlMap *cm = m_doc->controlMap();
+    cm->setDumpWindowMs(0);         // no dump to wait out: every press after the replug counts
+    cm->setBinding({ 0, kClip11, ControlMap::job(ControlMap::BlackoutTarget), ControlMap::Toggle });
+    settle();
+    const QString shift = QStringLiteral("#226");
+    QVERIFY(apc.press(shift));
+    settle();
+    QVERIFY(cm->isShiftHeld(0));
+    // The cable pulled with Shift down: its release never comes.
+    QVERIFY(apc.unplug());
+    settle();
+    QVERIFY(apc.replug());
+    settle();
+    QVERIFY2(!cm->isShiftHeld(0), "a Shift held as the board went away is still held");
+    QVERIFY(apc.tap(QStringLiteral("#%1").arg(kClip11)));
+    settle();
+    QVERIFY2(!m_doc->inputOutputMap()->blackout(), "one press made a blackout after a replug");
+}
+
+void SurfaceMap_Test::aGuardedJobOnTheShiftKeyNeverFires()
+{
+    SimMidiDevice apc(m_doc, m_stub, QStringLiteral("APC40 mkII"), 0, kApc, profile("Akai-APC40-mkII.qxi"));
+    QVERIFY2(apc.plug(), qPrintable(apc.lastError()));
+    ControlMap *cm = m_doc->controlMap();
+    // As a show file or a Learn could give it: Blackout on the Shift key.
+    cm->setBinding({ 0, 226, ControlMap::job(ControlMap::BlackoutTarget), ControlMap::Toggle });
+    m_doc->setMode(Doc::Operate);
+    settle();
+    QVERIFY(apc.tap(QStringLiteral("#226")));
+    settle();
+    QVERIFY2(!m_doc->inputOutputMap()->blackout(), "the Shift key alone made a blackout");
+    QCOMPARE(cm->lamp(cm->bindingsOn(0, 226).first()), ControlMap::LampOff);
+}
+
+void SurfaceMap_Test::aGroupLevelFaderPicksUpFirst()
+{
+    SimMidiDevice apc(m_doc, m_stub, QStringLiteral("APC40 mkII"), 0, kApc, profile("Akai-APC40-mkII.qxi"));
+    QVERIFY2(apc.plug(), qPrintable(apc.lastError()));
+    const JobShow show = jobShow(m_doc);
+    ControlMap *cm = m_doc->controlMap();
+    cm->setDumpWindowMs(0);
+    // A master used once, then turned off: its old level is not the group's now.
+    show.front->setMaster(true);
+    show.front->setMasterLevel(40);
+    show.front->setMaster(false);
+    m_doc->setMode(Doc::Operate);
+    settle();
+    const quint32 kLevel = 4103;
+    cm->setBinding({ 0, kLevel, ControlMap::job(ControlMap::GroupLevelTarget, show.front->id()),
+                     ControlMap::StartOnly });
+    settle();
+    QVERIFY(show.front->hasMaster());
+    QVERIFY2(show.front->masterLevel() == 255, "giving the job moved the group");
+    const QString fader = QStringLiteral("#%1").arg(kLevel);
+    // A fader parked at the bottom, brushed: the group stays at full.
+    QVERIFY(apc.set(fader, 1));
+    settle();
+    QVERIFY2(show.front->masterLevel() == 255, qPrintable(QString::number(show.front->masterLevel())));
+    // Brought up to the group, it is picked up and follows, both ways.
+    QVERIFY(apc.set(fader, 127));
+    settle();
+    QVERIFY(apc.set(fader, 64));
+    settle();
+    QVERIFY2(qAbs(int(show.front->masterLevel()) - 128) <= 2, qPrintable(QString::number(show.front->masterLevel())));
+    // The board goes away and comes back with the fader elsewhere: it waits again.
+    cm->setDumpWindowMs(500);
+    QVERIFY(apc.unplug());
+    settle();
+    QVERIFY(apc.replug({ { fader, 0 } }));
+    settle();
+    QVERIFY2(qAbs(int(show.front->masterLevel()) - 128) <= 2, "a replug's dump moved the group");
+}
+
+void SurfaceMap_Test::effectSizeComesBackWhenItsFaderGoes()
+{
+    SimMidiDevice apc(m_doc, m_stub, QStringLiteral("APC40 mkII"), 0, kApc, profile("Akai-APC40-mkII.qxi"));
+    QVERIFY2(apc.plug(), qPrintable(apc.lastError()));
+    ControlMap *cm = m_doc->controlMap();
+    m_doc->setMode(Doc::Operate);
+    settle();
+    const quint32 kSize = 12295;
+    const ControlMap::Binding b{ 0, kSize, ControlMap::job(ControlMap::EffectSizeTarget), ControlMap::StartOnly };
+    cm->setBinding(b);
+    settle();
+    const QString fader = QStringLiteral("#%1").arg(kSize);
+    QVERIFY(apc.set(fader, 127));
+    settle();
+    QVERIFY(apc.set(fader, 32));
+    settle();
+    EffectScriptRunner *runner = m_doc->effectScriptRunner();
+    QVERIFY(runner != nullptr);
+    QVERIFY(runner->sizeMaster() < 0.5f);
+    // The fader given no job: nothing left to bring the effects back.
+    QVERIFY(cm->removeBinding(b.target));
+    settle();
+    QVERIFY2(qFuzzyCompare(runner->sizeMaster(), 1.0f), qPrintable(QString::number(runner->sizeMaster())));
+}
+
+void SurfaceMap_Test::theBoardJobsRoundTripThroughTheShowFile()
+{
+    SimMidiDevice apc(m_doc, m_stub, QStringLiteral("APC40 mkII"), 0, kApc, profile("Akai-APC40-mkII.qxi"));
+    QVERIFY2(apc.plug(), qPrintable(apc.lastError()));
+    const JobShow show = jobShow(m_doc);
+    SurfaceMaps maps(m_doc);
+    settle();
+    const QString g = QString::number(show.front->id());
+    const QList<QPair<quint32, QString>> jobs = {
+        { kClip11, QStringLiteral("blackout") }, { kClip11 + 1, QStringLiteral("fadestop:10") },
+        { kClip11 + 2, QStringLiteral("clear") }, { kClip11 + 3, QStringLiteral("blind") },
+        { kClip11 + 4, QStringLiteral("flash:") + g }, { kClip11 + 5, QStringLiteral("song-next") },
+        { kClip11 + 6, QStringLiteral("song-prev") }, { kClip11 + 7, QStringLiteral("subgo") },
+        { 128 + 24, QStringLiteral("store") }, { 128 + 25, QStringLiteral("tap:1") },
+        { 128 + 26, QStringLiteral("cue:%1").arg(show.cues.at(2)) },
+        { 4103, QStringLiteral("level:") + g }, { 8199, QStringLiteral("speed:2") }, { 12295, QStringLiteral("size") } };
+    for (const auto &j : jobs)
+        QVERIFY2(maps.applyJob(0, j.first, j.second), qPrintable(j.second));
+    ControlMap *cm = m_doc->controlMap();
+    const QList<ControlMap::Binding> before = cm->bindings();
+    QCOMPARE(before.size(), jobs.size());
+
+    QBuffer buffer;
+    buffer.open(QIODevice::WriteOnly);
+    QXmlStreamWriter w(&buffer);
+    w.writeStartDocument();
+    QVERIFY(cm->saveXML(&w));
+    w.writeEndDocument();
+    buffer.close();
+    // Every type by its own name in the file.
+    for (const char *t : { "Blackout", "FadeStop", "ClearSelection", "Blind", "FlashGroup", "NextSong",
+                           "PreviousSong", "SubGo", "EditLiveStore", "Tap", "GroupLevel", "EffectSpeed", "EffectSize" })
+        QVERIFY2(buffer.data().contains(QByteArray("Target=\"") + t + "\""), t);
+
+    cm->reset();
+    QVERIFY(cm->bindings().isEmpty());
+    QXmlStreamReader r(buffer.data());
+    r.readNextStartElement();
+    QVERIFY(cm->loadXML(r));
+    QCOMPARE(cm->bindings(), before);
+    settle();
+    // And they are the board's jobs again.
+    QCOMPARE(maps.view(0)->jobText(kClip11), QStringLiteral("Shift+Blackout"));
+    QCOMPARE(cm->targetName(ControlMap::job(ControlMap::FadeStopTarget, 10)), QStringLiteral("Fade and stop (10 s)"));
+}
+
+void SurfaceMap_Test::jobPickerShots()
+{
+    const QString dir = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (dir.isEmpty())
+        QSKIP("QLC_SHOT_DIR not set");
+    QDir().mkpath(dir);
+    const QString prefix = qEnvironmentVariable("QLC_SHOT_PREFIX", QStringLiteral("after"));
+    SimMidiDevice apc(m_doc, m_stub, QStringLiteral("APC40 mkII"), 0, kApc, profile("Akai-APC40-mkII.qxi"));
+    QVERIFY2(apc.plug(), qPrintable(apc.lastError()));
+    const JobShow show = jobShow(m_doc);
+    FixtureGroup *back = new FixtureGroup(m_doc);
+    back->setName(QStringLiteral("Back"));
+    m_doc->addFixtureGroup(back);
+    settle();
+    const QList<QSize> sizes = { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) };
+    for (const QSize &size : sizes)
+    {
+        QScrollArea scroll;
+        scroll.setWidgetResizable(true);
+        ControlSurfacesPanel *hub = new ControlSurfacesPanel(m_doc);
+        scroll.setWidget(hub);
+        scroll.resize(size.width() - 240, size.height() - 120);
+        scroll.show();
+        settle();
+        SurfaceMaps *maps = hub->surfaceMaps();
+        if (size == sizes.first())
+        {
+            QVERIFY(maps->applyJob(0, kClip11, QStringLiteral("blackout")));
+            QVERIFY(maps->applyJob(0, kClip11 + 1, QStringLiteral("flash:%1").arg(show.front->id())));
+            QVERIFY(maps->applyJob(0, kClip11 + 2, QStringLiteral("song-next")));
+            QVERIFY(maps->applyJob(0, kClip11 + 3, QStringLiteral("fadestop:5")));
+            QVERIFY(maps->applyJob(0, 24583, QStringLiteral("level:%1").arg(show.front->id())));
+        }
+        maps->showMap(0);
+        settle();
+        const QString tag = QStringLiteral("%1x%2").arg(size.width()).arg(size.height());
+        QVERIFY(scroll.grab().save(QStringLiteral("%1/%2-jobs-map-%3.png").arg(dir, prefix, tag)));
+        // A key's picker, then its Flash a group submenu, then a fader's.
+        std::unique_ptr<QMenu> menu(maps->jobMenu(0, kClip11 + 1));
+        QVERIFY(menu != nullptr);
+        menu->popup(scroll.mapToGlobal(QPoint(40, 40)));
+        settle();
+        QVERIFY(menu->grab().save(QStringLiteral("%1/%2-jobs-picker-key-%3.png").arg(dir, prefix, tag)));
+        for (QAction *a : menu->actions())
+            if (a->menu() != nullptr && a->text().startsWith(QStringLiteral("Flash a Group")))
+            {
+                a->menu()->popup(scroll.mapToGlobal(QPoint(300, 80)));
+                settle();
+                QVERIFY(a->menu()->grab().save(QStringLiteral("%1/%2-jobs-picker-flash-%3.png").arg(dir, prefix, tag)));
+                a->menu()->close();
+            }
+        menu->close();
+        std::unique_ptr<QMenu> fader(maps->jobMenu(0, 24583));
+        QVERIFY(fader != nullptr);
+        fader->popup(scroll.mapToGlobal(QPoint(40, 40)));
+        settle();
+        QVERIFY(fader->grab().save(QStringLiteral("%1/%2-jobs-picker-fader-%3.png").arg(dir, prefix, tag)));
+        fader->close();
+        while (QWidget *pop = QApplication::activePopupWidget())
+            pop->close();
+    }
 }
 
 void SurfaceMap_Test::keyLabelsAtTheRealKeySizes()

@@ -58,6 +58,9 @@
 #include "universe.h"
 #include "showsettingsdialog.h"
 #include "showoperate.h"
+#include "showtreecontroller.h"
+#include "speedmasters.h"
+#include "fixturegroup.h"
 #include "doc.h"
 
 namespace
@@ -333,8 +336,9 @@ void SurfaceMapView::refresh()
         {
             cell.group = Board;
             cell.job = tr("Shift");
-            lines << tr("The %1's Shift key: held with STOP it stops everything, held with GO it "
-                        "releases a stop.").arg(m_layout.name().toHtmlEscaped());
+            lines << tr("The %1's Shift key: held with STOP it stops everything (where STOP asks for it), "
+                        "held with GO it releases a stop, and held with a Shift+ job (Blackout, Fade and "
+                        "stop, Clear the selection) it does that job.").arg(m_layout.name().toHtmlEscaped());
         }
         else if (pages != nullptr && pages->owns(m_universe, c.channel))
         {
@@ -368,6 +372,12 @@ void SurfaceMapView::refresh()
         {
             cell.group = Show;
             cell.job = show.first()->thing;
+            // A job that takes two controls says so on the control (Q355).
+            if (show.first()->kind == ControlOwners::Trigger && ControlMap::isGuardedJob(show.first()->target.type))
+            {
+                cell.job = tr("Shift+%1").arg(cell.job);
+                lines << tr("Held with Shift it does its job. Alone it does nothing: the footer says so.");
+            }
             if (show.size() > 1)
                 cell.job = tr("%1 +%2").arg(cell.job).arg(show.size() - 1);
             // A hit or trigger armed only at a place that is not live now: dimmer.
@@ -1705,20 +1715,73 @@ QList<SurfaceMaps::Job> SurfaceMaps::jobsFor(quint32 universe, quint32 channel) 
         const DeskRecord::Binding b = desk->binding(r);
         return b.isSet() && b.identity == here && c.hears(b.channel);
     };
-    auto add = [&out](const QString &key, const QString &text, bool checked = false, bool enabled = true) {
+    auto add = [&out](const QString &key, const QString &text, bool checked = false, bool enabled = true,
+                      const QString &group = QString()) {
         Job j;
         j.key = key;
         j.text = text;
         j.checked = checked;
         j.enabled = enabled;
+        j.group = group;
         out << j;
     };
+    ControlMap *cm = m_doc->controlMap();
+    // A board job (Q355) is the control's when the show binds it there.
+    auto isJob = [&](ControlMap::TargetType type, quint32 n) {
+        const ControlMap::Binding *b = cm->binding(ControlMap::job(type, n));
+        return b != nullptr && b->universe == universe && c.hears(b->channel);
+    };
+    const QList<FixtureGroup *> groups = m_doc->fixtureGroups();
+    const SpeedMasters *speed = m_doc->speedMasters();
+    const int masters = speed != nullptr ? speed->count() : 0;
     const bool key = c.kind == SurfaceLayout::Button || c.kind == SurfaceLayout::Pad;
     if (key)
     {
         add(QStringLiteral("go"), tr("GO"), isRole(DeskRecord::Go));
         add(QStringLiteral("back"), tr("Back"), isRole(DeskRecord::Back));
         add(QStringLiteral("stop"), tr("STOP (all off)"), isRole(DeskRecord::Stop));
+        add(QStringLiteral("subgo"), tr("Sub GO"), isJob(ControlMap::SubGoTarget, 0));
+        add(QStringLiteral("song-next"), tr("Next Song"), isJob(ControlMap::NextSongTarget, 0));
+        add(QStringLiteral("song-prev"), tr("Previous Song"), isJob(ControlMap::PreviousSongTarget, 0));
+        // Jump to cue N: GO that cue of the Run tab's list (a cue trigger).
+        const QString jump = tr("Jump to Cue");
+        ShowTreeController *st = m_doc->showTree();
+        const ShowTree::CueList *list = st != nullptr ? st->cueList(cm->runList()) : nullptr;
+        if (list == nullptr || list->cues.isEmpty())
+            add(QStringLiteral("cue"), tr("Jump to Cue (the Run tab's list has no cues)"), false, false);
+        for (int i = 0; list != nullptr && i < list->cues.size(); ++i)
+        {
+            const ShowTree::Cue &cue = list->cues.at(i);
+            const QString number = st->cueNumber(*list, i);
+            add(QStringLiteral("cue:%1").arg(cue.id),
+                cue.name.isEmpty() ? tr("Cue %1").arg(number) : tr("Cue %1 %2").arg(number, cue.name),
+                isJob(ControlMap::CueTarget, cue.id), true, jump);
+        }
+        const QString flash = tr("Flash a Group");
+        if (groups.isEmpty())
+            add(QStringLiteral("flash"), tr("Flash a Group (the show has no fixture groups)"), false, false);
+        for (const FixtureGroup *g : groups)
+            add(QStringLiteral("flash:%1").arg(g->id()), g->name(), isJob(ControlMap::FlashGroupTarget, g->id()),
+                true, flash);
+        const QString tap = tr("Tap the Tempo");
+        for (int m = 0; m < masters; ++m)
+            add(QStringLiteral("tap:%1").arg(m), speed->name(m), isJob(ControlMap::TapTarget, quint32(m)), true, tap);
+        add(QStringLiteral("blind"), tr("Blind"), isJob(ControlMap::BlindTarget, 0));
+        add(QStringLiteral("store"), tr("Edit Live: Store"), isJob(ControlMap::EditLiveStoreTarget, 0));
+        /* The dangerous ones take two controls: Shift held, as Shift+STOP.
+           A board with no Shift cannot have them (the operator rules). */
+        const bool shift = m_doc->controlMap()->shiftChannelOf(universe) != 0xFFFFFFFF
+                           && c.channel != m_doc->controlMap()->shiftChannelOf(universe);
+        const QString needs = tr("needs a Shift key");
+        add(QStringLiteral("blackout"), shift ? tr("Blackout (Shift+)") : tr("Blackout (%1)").arg(needs),
+            isJob(ControlMap::BlackoutTarget, 0), shift);
+        add(QStringLiteral("clear"), shift ? tr("Clear the Selection (Shift+)")
+                                           : tr("Clear the Selection (%1)").arg(needs),
+            isJob(ControlMap::ClearSelectionTarget, 0), shift);
+        const QString fade = shift ? tr("Fade and Stop (Shift+)") : tr("Fade and Stop (%1)").arg(needs);
+        for (quint32 sec : { 1u, 3u, 5u, 10u, 30u })
+            add(QStringLiteral("fadestop:%1").arg(sec), tr("Over %1 s").arg(sec),
+                isJob(ControlMap::FadeStopTarget, sec), shift, fade);
         const PageSet set = pages->pageSet(universe);
         if (set.isValid())
         {
@@ -1732,13 +1795,24 @@ QList<SurfaceMaps::Job> SurfaceMaps::jobsFor(quint32 universe, quint32 channel) 
     else if (c.isFader())
     {
         add(QStringLiteral("gm"), tr("Grand Master"), isRole(DeskRecord::GrandMaster));
+        const QString level = tr("A Group's Level");
+        if (groups.isEmpty())
+            add(QStringLiteral("level"), tr("A Group's Level (the show has no fixture groups)"), false, false);
+        for (const FixtureGroup *g : groups)
+            add(QStringLiteral("level:%1").arg(g->id()), g->name(), isJob(ControlMap::GroupLevelTarget, g->id()),
+                true, level);
+        const QString effects = tr("Effect Speed");
+        for (int m = 0; m < masters; ++m)
+            add(QStringLiteral("speed:%1").arg(m), speed->name(m), isJob(ControlMap::EffectSpeedTarget, quint32(m)),
+                true, effects);
+        add(QStringLiteral("size"), tr("Effect Size"), isJob(ControlMap::EffectSizeTarget, 0));
     }
     add(QStringLiteral("other"), tr("Other… (Assign to Control)"));
     // No job: what this control has of the desk, the pages or the Control Map.
     bool has = false;
     for (const Job &j : std::as_const(out))
         has = has || j.checked;
-    has = has || !m_doc->controlMap()->bindingsOn(universe, channel).isEmpty();
+    has = has || !cm->bindingsOn(universe, channel).isEmpty();
     add(QStringLiteral("none"), tr("No job"), false, has);
     return out;
 }
@@ -1770,6 +1844,7 @@ QMenu *SurfaceMaps::jobMenu(quint32 universe, quint32 channel)
         });
     };
     bool sep = false;
+    QHash<QString, QMenu *> subs;
     for (const Job &j : jobs)
     {
         if (!sep && (j.key == QLatin1String("other")))
@@ -1777,7 +1852,33 @@ QMenu *SurfaceMaps::jobMenu(quint32 universe, quint32 channel)
             menu->addSeparator();
             sep = true;
         }
-        addJob(j);
+        if (j.group.isEmpty())
+        {
+            addJob(j);
+            continue;
+        }
+        // A job with an N: its choices in a submenu, ticked when one is the control's.
+        QMenu *sub = subs.value(j.group);
+        if (sub == nullptr)
+        {
+            sub = menu->addMenu(j.group);
+            sub->setObjectName(QStringLiteral("surfaceJobSub"));
+            sub->menuAction()->setEnabled(false);   // enabled by a choice that is
+            subs.insert(j.group, sub);
+        }
+        QAction *a = sub->addAction(j.text);
+        a->setData(j.key);
+        a->setCheckable(true);
+        a->setChecked(j.checked);
+        a->setEnabled(j.enabled);
+        if (j.checked)
+            sub->menuAction()->setText(tr("%1: %2").arg(j.group, j.text));
+        sub->menuAction()->setEnabled(sub->menuAction()->isEnabled() || j.enabled);
+        connect(a, &QAction::triggered, this, [this, universe, channel, key = j.key]() {
+            QString why;
+            if (!applyJob(universe, channel, key, &why) && !why.isEmpty())
+                QToolTip::showText(QCursor::pos(), why, this);
+        });
     }
     if (c.turns())
     {
@@ -1856,6 +1957,70 @@ bool SurfaceMaps::applyJob(quint32 universe, quint32 channel, const QString &key
     QString text;
     bool ok = false;
     QString reason;
+    // A board job moved here from another control: Undo puts it back there.
+    QList<ControlMap::Binding> movedFrom;
+
+    /* A board job (Q355): the show's, kept with it. One job per control:
+       the desk's role on it, its page key and its other triggers go. */
+    ControlMap::Target job;
+    const int colon = key.indexOf(QLatin1Char(':'));
+    const QString base = colon < 0 ? key : key.left(colon);
+    bool okN = colon < 0;
+    const quint32 n = colon < 0 ? 0 : key.mid(colon + 1).toUInt(&okN);
+    static const QHash<QString, ControlMap::TargetType> kJobs = {
+        { QStringLiteral("subgo"), ControlMap::SubGoTarget },
+        { QStringLiteral("song-next"), ControlMap::NextSongTarget },
+        { QStringLiteral("song-prev"), ControlMap::PreviousSongTarget },
+        { QStringLiteral("cue"), ControlMap::CueTarget },
+        { QStringLiteral("flash"), ControlMap::FlashGroupTarget },
+        { QStringLiteral("tap"), ControlMap::TapTarget },
+        { QStringLiteral("blind"), ControlMap::BlindTarget },
+        { QStringLiteral("store"), ControlMap::EditLiveStoreTarget },
+        { QStringLiteral("blackout"), ControlMap::BlackoutTarget },
+        { QStringLiteral("fadestop"), ControlMap::FadeStopTarget },
+        { QStringLiteral("clear"), ControlMap::ClearSelectionTarget },
+        { QStringLiteral("level"), ControlMap::GroupLevelTarget },
+        { QStringLiteral("speed"), ControlMap::EffectSpeedTarget },
+        { QStringLiteral("size"), ControlMap::EffectSizeTarget },
+    };
+    const bool isJobKey = kJobs.contains(base) && okN;
+    if (isJobKey)
+    {
+        job = ControlMap::job(kJobs.value(base), n);
+        const bool keyKind = c.kind == SurfaceLayout::Button || c.kind == SurfaceLayout::Pad;
+        if (ControlMap::isFaderJob(job.type) ? !c.isFader() : !keyKind)
+            return refuse(ControlMap::isFaderJob(job.type) ? tr("%1 takes a fader.").arg(cm->targetName(job))
+                                                           : tr("%1 takes a key.").arg(cm->targetName(job)));
+        if (!cm->targetExists(job))
+            return refuse(tr("That is not in the show any more."));
+        // Two controls, never one press: a board with a Shift key only.
+        if (ControlMap::isGuardedJob(job.type)
+            && (cm->shiftChannelOf(universe) == 0xFFFFFFFF || cm->shiftChannelOf(universe) == c.channel))
+            return refuse(tr("%1 takes two controls, Shift and the key: this board has no Shift key to "
+                             "hold.").arg(cm->targetName(job)));
+        if (desk->isDeskControl(universe, c.channel))
+        {
+            desk->setUnlocked(true);
+            for (DeskRecord::Role r : DeskRecord::roles())
+            {
+                const DeskRecord::Binding b = desk->binding(r);
+                if (b.isSet() && b.identity == desk->identityOfUniverse(universe) && c.hears(b.channel))
+                    desk->clear(r);
+            }
+            desk->relock();
+        }
+        pages->clearKey(universe, c.channel);
+        for (const ControlMap::Binding &b : triggers)
+            cm->removeBinding(b.target);
+        if (const ControlMap::Binding *was = cm->binding(job))
+            movedFrom << *was;
+        cm->setBinding(ControlMap::Binding(universe, c.channel, job, ControlMap::modesFor(job.type).first()));
+        ok = cm->binding(job) != nullptr;
+        if (!ok)
+            reason = tr("That job could not be given to %1.").arg(c.face);
+        text = ControlMap::isGuardedJob(job.type) ? tr("%1 is Shift+%2").arg(c.face, cm->targetName(job))
+                                                  : tr("%1 is %2").arg(c.face, cm->targetName(job));
+    }
 
     auto assign = [&](DeskRecord::Role r) {
         // The PIN was asked above, for this change: the desk takes it once.
@@ -1867,7 +2032,9 @@ bool SurfaceMaps::applyJob(quint32 universe, quint32 channel, const QString &key
             pages->clearKey(universe, c.channel);
         text = tr("%1 is %2").arg(c.face, DeskRecord::roleName(r));
     };
-    if (key == QLatin1String("go"))
+    if (isJobKey)
+        ;   // done above
+    else if (key == QLatin1String("go"))
         assign(DeskRecord::Go);
     else if (key == QLatin1String("back"))
         assign(DeskRecord::Back);
@@ -1920,7 +2087,14 @@ bool SurfaceMaps::applyJob(quint32 universe, quint32 channel, const QString &key
         return refuse(reason);
 
     m_undo.text = text;
-    m_undo.undo = [this, universe, roles, keys, triggers]() {
+    m_undo.undo = [this, universe, channel = c.channel, roles, keys, triggers, movedFrom]() {
+        // What this control does now goes; what it and the moved job's control had comes back.
+        ControlMap *map = m_doc->controlMap();
+        for (const ControlMap::Binding &b : map->bindingsOn(universe, channel))
+            if (!triggers.contains(b))
+                map->removeBinding(b.target);
+        for (const ControlMap::Binding &b : movedFrom)
+            map->setBinding(b);
         DeskRecord *d = m_doc->deskRecord();
         d->setUnlocked(true);
         int n = 0;

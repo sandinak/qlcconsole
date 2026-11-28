@@ -45,6 +45,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Added
 
+- **Every board job from the map** (board Q355): click a key in Connections ▸ Control surfaces for Sub GO, Next or Previous song, Jump to cue, Flash a group, Tap the tempo, Blind, Edit Live: Store, and, with Shift held, Blackout, Fade and stop and Clear the selection; a fader for a group's level, the effects' speed or their size. Saved with the show; each lamp says what its job is doing. The APC40 mkII's Shift key is now its Shift.
 - **Board menu on each footer chip** (▾ or right-click): Map, Send Init Again, Profile, Feedback, Lamp Test, Board Log, Set Up.
 - **Board Log**: the last 500 MIDI messages in and out of each board, decoded with the control's name, with the app's own steps (init, motor fader, a refused pick-up or STOP); Copy for a report.
 - **Lamp Test for every board** with a feedback line (the MaizeDMX's too).

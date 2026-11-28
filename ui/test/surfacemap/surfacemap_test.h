@@ -93,6 +93,35 @@ private slots:
     /** Page ◀ and ▶ the map lets you choose: they step the pages, are kept
      *  for this computer, and the chip's page name picks a page. */
     void pagesHaveKeysTheMapChooses();
+    /** Q355: the picker lists every board job (the N ones in submenus,
+     *  the Shift+ ones said so), a fader job takes a fader, one job per
+     *  control, and Undo puts a moved job back. */
+    void theBoardJobsAreInThePicker();
+    /** A board with no Shift: Blackout, Fade and stop and Clear are not
+     *  given; one from a file is dark and its press refused, said. */
+    void aBoardWithNoShiftHasNoShiftJobs();
+    /** Each board job fires from a press on the simulated APC40; the
+     *  guarded ones refuse a single press and fire with Shift held. */
+    void everyBoardJobFiresFromTheBoard();
+    /** Every board job is saved with the show and loads back the same. */
+    void theBoardJobsRoundTripThroughTheShowFile();
+    /** Review of Q355: a Flash never drives stage machinery, a one-shot, a
+     *  switch or a hazard (a press is not a run). */
+    void aFlashLeavesMachineryAlone();
+    /** ... the emergency stop lets go of a Flash held through it. */
+    void theEmergencyStopEndsAFlash();
+    /** ... a Shift held as the board went away is not held when it is back. */
+    void aShiftHeldAcrossAReplugIsNoShift();
+    /** ... a guarded job on the Shift key itself never fires on its press. */
+    void aGuardedJobOnTheShiftKeyNeverFires();
+    /** ... a group's level fader picks up first (no jump on a brush or a
+     *  replug's dump); giving the job keeps the group where it is. */
+    void aGroupLevelFaderPicksUpFirst();
+    /** ... the Effect size fader's job taken off: the effects as made. */
+    void effectSizeComesBackWhenItsFaderGoes();
+    /** With QLC_SHOT_DIR: the job picker (a key's, its submenu, a fader's)
+     *  and the map with board jobs, at three sizes. */
+    void jobPickerShots();
     /** Print Key Labels: a sheet at the real key sizes, one set per page,
      *  as a PDF; tape labels at 180 dpi for the 12, 18 and 24 mm tapes as
      *  PNGs and a PDF; sizes through the units setting. */
