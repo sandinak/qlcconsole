@@ -24,6 +24,7 @@
 #include <QScrollBar>
 #include <QPdfWriter>
 #include <QPainter>
+#include <QPicture>
 #include <QLocale>
 #include <QFile>
 #include <QHash>
@@ -458,9 +459,25 @@ void PlotSheet::paintDrawing(QPainter *p, const Layout &l) const
     else if (v != nullptr && v->scene() != nullptr && !l.source.isEmpty())
     {
         ViewGuard guard(v, m_options.view);
+        /* Recorded at about screen scale (two units a point), then replayed
+           on the page. What keeps its size on screen whatever the zoom -- a
+           structure's count badge, a network node's tag -- is drawn in
+           device units: straight onto a 600 dpi PDF it shrank to a speck.
+           A QPicture keeps the drawing vector. */
+        const double rec = 2.0;
+        const QRectF target(QPointF(0, 0), l.plot.size() * rec);
+        QPicture picture;
+        {
+            QPainter pp(&picture);
+            pp.setRenderHints(p->renderHints());
+            pp.setClipRect(target);
+            v->scene()->render(&pp, target, l.source, Qt::KeepAspectRatio);
+        }
         p->save();
         p->setClipRect(inner);
-        v->scene()->render(p, l.plot, l.source, Qt::KeepAspectRatio);
+        p->translate(l.plot.topLeft());
+        p->scale(1.0 / rec, 1.0 / rec);
+        p->drawPicture(QPointF(0, 0), picture);
         p->restore();
     }
     else
