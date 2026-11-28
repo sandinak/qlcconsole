@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE InputProfile>
+<InputProfile xmlns="http://www.qlcplus.org/InputProfile">
+ <Creator>
+  <Name>Q Light Controller Plus</Name>
+  <Version>4.14.4</Version>
+  <Author>Branson Matheson</Author>
+ </Creator>
+ <!-- The LPD8 mk2 (2020). Factory program 1 in NOTE mode: pads notes 36-43 on MIDI channel 10 (read on any channel: 9 << 12), knobs K1-K8 CC 70-77 on channel 1. Its RGB pads ignore a note: qlcconsole lights them with one SysEx (SurfaceSetup). Not from Akai's documents, which give no MIDI map: two independent reads of real units (wobondar/mixxx-lpd8-mk2-daedalus HARDWARE.md, stephensrmmartin/lpd8mk2). His unit (dink, 2026-11-28): USB 09e8:004c, firmware 0x0249, CoreMIDI port "LPD8 mk2" both ways. Pad 1 is Shift: Shift + Pad 8 is the stop. -->
+ <Manufacturer>Akai</Manufacturer>
+ <Model>LPD8 mk2</Model>
+ <Type>MIDI</Type>
+ <Match>LPD8 mk2*</Match>
+ <Match>LPD8mk2*</Match>
+ <Match>LPD8 MKII*</Match>
+ <Surface Version="1"/>
+ <Channel Number="70">
+  <Name>Knob K1</Name>
+  <Type>Slider</Type>
+  <Role>GrandMaster</Role>
+  <Facts Fader="Absolute"/>
+ </Channel>
+ <Channel Number="71">
+  <Name>Knob K2</Name>
+  <Type>Slider</Type>
+  <Facts Fader="Absolute"/>
+ </Channel>
+ <Channel Number="72">
+  <Name>Knob K3</Name>
+  <Type>Slider</Type>
+  <Facts Fader="Absolute"/>
+ </Channel>
+ <Channel Number="73">
+  <Name>Knob K4</Name>
+  <Type>Slider</Type>
+  <Facts Fader="Absolute"/>
+ </Channel>
+ <Channel Number="74">
+  <Name>Knob K5</Name>
+  <Type>Slider</Type>
+  <Facts Fader="Absolute"/>
+ </Channel>
+ <Channel Number="75">
+  <Name>Knob K6</Name>
+  <Type>Slider</Type>
+  <Facts Fader="Absolute"/>
+ </Channel>
+ <Channel Number="76">
+  <Name>Knob K7</Name>
+  <Type>Slider</Type>
+  <Facts Fader="Absolute"/>
+ </Channel>
+ <Channel Number="77">
+  <Name>Knob K8</Name>
+  <Type>Slider</Type>
+  <Facts Fader="Absolute"/>
+ </Channel>
+ <Channel Number="37028">
+  <Name>Pad 1</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="37029">
+  <Name>Pad 2</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="37030">
+  <Name>Pad 3</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+  <Role>Back</Role>
+ </Channel>
+ <Channel Number="37031">
+  <Name>Pad 4</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+  <Role>Go</Role>
+ </Channel>
+ <Channel Number="37032">
+  <Name>Pad 5</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="37033">
+  <Name>Pad 6</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="37034">
+  <Name>Pad 7</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="37035">
+  <Name>Pad 8</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+  <Role>EmergencyStop</Role>
+ </Channel>
+</InputProfile>

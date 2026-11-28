@@ -1036,7 +1036,7 @@ void SurfaceSim_Test::theApc64SeedsItsDefaults()
 void SurfaceSim_Test::aProfileIsChosenByTheDevice()
 {
     for (const char *f : { "Akai-APC40-mkII.qxi", "Akai-APC40.qxi", "Akai-APC64.qxi", "Akai-APCMini-mk2.qxi",
-                           "Akai-APCMini.qxi", "PreSonus-FaderPort-2.qxi" })
+                           "Akai-APCMini.qxi", "PreSonus-FaderPort-2.qxi", "Akai-LPD8.qxi", "Akai-LPD8-mk2.qxi" })
         QVERIFY(mapProfile(m_doc, profileDir() + QLatin1String(f)) != nullptr);
     struct Row { const char *device; const char *profile; };
     const Row rows[] = {
@@ -1046,6 +1046,9 @@ void SurfaceSim_Test::aProfileIsChosenByTheDevice()
         { "APC mini mk2 Control", "Akai APC Mini mk2" },
         { "APC MINI", "Akai APC Mini" },                    // not the mk2
         { "PreSonus FP2", "PreSonus FaderPort 2" },
+        { "LPD8", "Akai LPD8" },
+        { "LPD8 mk2", "Akai LPD8 mk2" },                   // not the original's
+        { "LPD8 MIDI 1", "Akai LPD8" },                     // Linux's port name
         { "APC64 Notes (APC64)", "" },                      // another port of the APC64
         { "USB2.0-MIDI Port 1", "" },                       // a name many boxes share
     };
@@ -1110,6 +1113,194 @@ void SurfaceSim_Test::theApcMiniMk2SeedsItsDefaults()
     settle();
     QVERIFY(mini.lamp(235) > 0);
     QVERIFY(mini.lamp(234) > 0);
+}
+
+void SurfaceSim_Test::theLpd8sSeedTheirDefaultsAndGuardTheStop_data()
+{
+    QTest::addColumn<QString>("file");
+    QTest::addColumn<QString>("port");
+    QTest::addColumn<QString>("profile");
+    QTest::addColumn<quint32>("pad1");      // Pad 1's channel (note 36)
+    QTest::addColumn<quint32>("k1");        // K1's channel
+    // The original: everything on MIDI channel 1, the knobs CC 0-7.
+    QTest::newRow("LPD8") << "Akai-LPD8.qxi" << "LPD8" << "Akai LPD8" << quint32(128 + 36) << quint32(0);
+    // The mk2: the pads on channel 10, the knobs CC 70-77 on channel 1.
+    QTest::newRow("LPD8 mk2") << "Akai-LPD8-mk2.qxi" << "LPD8 mk2" << "Akai LPD8 mk2"
+                              << quint32((9 << 12) | (128 + 36)) << quint32(70);
+}
+
+void SurfaceSim_Test::theLpd8sSeedTheirDefaultsAndGuardTheStop()
+{
+    QFETCH(QString, file);
+    QFETCH(QString, port);
+    QFETCH(QString, profile);
+    QFETCH(quint32, pad1);
+    QFETCH(quint32, k1);
+    QVERIFY(mapProfile(m_doc, profileDir() + file) != nullptr);
+    const SurfaceLayout layout = SurfaceLayout::forProfile(profile);
+    QVERIFY(layout.isValid());
+    QCOMPARE(layout.controls().size(), 8 + 8);
+    QCOMPARE(layout.shiftChannel(), pad1);
+    // Patched by its port's name only: its profile and its defaults follow.
+    SimMidiDevice lpd(m_doc, m_stub, port, 0);
+    QVERIFY2(lpd.plug(), qPrintable(lpd.lastError()));
+    settle();
+    QCOMPARE(m_doc->inputOutputMap()->inputPatch(0)->profileName(), profile);
+    DeskRecord *desk = m_doc->deskRecord();
+    QCOMPARE(desk->binding(DeskRecord::Go).channel, pad1 + 3);          // Pad 4
+    QCOMPARE(desk->binding(DeskRecord::Back).channel, pad1 + 2);        // Pad 3
+    QCOMPARE(desk->binding(DeskRecord::Stop).channel, pad1 + 7);        // Pad 8
+    QCOMPARE(desk->binding(DeskRecord::GrandMaster).channel, k1);       // K1
+    QVERIFY(desk->shiftGuardsStop(0));
+    QVERIFY(desk->shiftGuardsRelease(0));
+
+    runList(m_doc);
+    QList<int> commands;
+    m_doc->showControl()->setGoGuardMs(0);
+    m_doc->showControl()->setRunHandler([&commands](const ShowControl::Request &r, ShowControl::Route) {
+        commands << int(r.command);
+        return true;
+    });
+    const QString padGo = QStringLiteral("#%1").arg(pad1 + 3);
+    const QString padBack = QStringLiteral("#%1").arg(pad1 + 2);
+    const QString padStop = QStringLiteral("#%1").arg(pad1 + 7);
+    const QString padShift = QStringLiteral("#%1").arg(pad1);
+    QVERIFY(lpd.tap(padGo));
+    settle();
+    QCOMPARE(int(commands.count(int(ShowControl::Go))), 1);
+    QVERIFY(lpd.tap(padBack));
+    settle();
+    QCOMPARE(int(commands.count(int(ShowControl::Back))), 1);
+
+    // Pad 8 alone: no stop, and the footer is told why.
+    QSignalSpy fired(desk, &DeskRecord::fired);
+    QSignalSpy refused(desk, &DeskRecord::refused);
+    QVERIFY(lpd.tap(padStop));
+    settle();
+    QCOMPARE(fired.count(), 0);
+    QCOMPARE(refused.count(), 1);
+    QCOMPARE(refused.first().first().toString(), QStringLiteral("%1: Shift+Stop stops.").arg(layout.shortName()));
+    QVERIFY(!m_doc->outputRuleKeeper()->emergencyStopped());
+    // Pad 1 held: Pad 8 stops.
+    QVERIFY(lpd.chord({ padShift, padStop }));
+    settle();
+    QCOMPARE(fired.count(), 1);
+    QCOMPARE(fired.first().first().toString(), QStringLiteral("ALL OFF"));
+    QVERIFY(m_doc->outputRuleKeeper()->emergencyStopped());
+    // Stopped: Pad 4 alone does not release it.
+    const int gos = int(commands.count(int(ShowControl::Go)));
+    QVERIFY(lpd.tap(padGo));
+    settle();
+    QCOMPARE(int(commands.count(int(ShowControl::Go))), gos);
+    QVERIFY(m_doc->outputRuleKeeper()->emergencyStopped());
+    // K1: the Grand Master (picked up, then followed).
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    for (int v : { 120, 124, 127, 110, 90, 64 })
+        QVERIFY(lpd.set(QStringLiteral("#%1").arg(k1), v));
+    settle();
+    QCOMPARE(int(iom->grandMasterValue()), 128);
+}
+
+void SurfaceSim_Test::theLpd8Mk2PadsArePaintedBySysEx()
+{
+    // The message: 7 header bytes, 8 pads x 6, F7; 255 is 01 7F.
+    const QByteArray white = SurfaceSetup::lpd8Mk2Colours({ QColor(255, 255, 255) });
+    QCOMPARE(int(white.size()), 7 + 48 + 1);
+    QCOMPARE(hex(white.left(13)), QStringLiteral("f0 47 7f 4c 06 00 30 01 7f 01 7f 01 7f"));
+    QCOMPARE(white.mid(13, 42), QByteArray(42, 0));
+    QCOMPARE(uchar(white.at(55)), uchar(0xF7));
+    QCOMPARE(hex(SurfaceSetup::lpd8Mk2Colours({ QColor(0, 0, 0), QColor(130, 0, 5) }).mid(13, 6)),
+             QStringLiteral("01 02 00 00 00 05"));
+
+    const QString mk2 = QStringLiteral("Akai LPD8 mk2");
+    QVERIFY(mapProfile(m_doc, profileDir() + QStringLiteral("Akai-LPD8-mk2.qxi")) != nullptr);
+    QVERIFY(mapProfile(m_doc, profileDir() + QStringLiteral("Akai-LPD8.qxi")) != nullptr);
+    const quint32 pad1 = (9 << 12) | (128 + 36);
+    auto paints = [this]() {
+        QList<QByteArray> out;
+        for (const auto &m : std::as_const(m_stub->m_showControlSent))
+            if (m.second.startsWith(QByteArray::fromHex("F0477F4C060030")))
+                out << m.second;
+        return out;
+    };
+    /* A pad's colour in a paint: its six bytes put back together. */
+    auto padIn = [](const QByteArray &m, int pad) {
+        auto v = [&m, pad](int c) { return (uchar(m.at(7 + pad * 6 + c * 2)) << 7) | uchar(m.at(8 + pad * 6 + c * 2)); };
+        return QColor(v(0), v(1), v(2));
+    };
+    m_stub->m_showControlSent.clear();
+    SimMidiDevice board(m_doc, m_stub, QStringLiteral("LPD8 mk2"), 0, mk2);
+    QVERIFY2(board.plug(), qPrintable(board.lastError()));
+    settle();
+    SurfaceSetup *setup = m_doc->surfaceSetup();
+    QCOMPARE(setup->universes(), QList<quint32>() << 0);
+    // Patched: the pads painted (none lit yet), out of its own port.
+    QVERIFY(!paints().isEmpty());
+    QCOMPARE(int(m_stub->m_showControlSent.last().first), board.line());
+    QVERIFY(setup->lastCheck(0).text.contains(QStringLiteral("pads' colours")));
+
+    QTRY_VERIFY(!setup->initAgainPending(0));
+    settle(50);
+
+    /* GO's lamp (Pad 4) and a free pad's (Pad 6), sent in one turn: none
+       goes out at once, one paint of the whole board follows. */
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    m_stub->m_showControlSent.clear();
+    iom->sendFeedBack(0, pad1 + 3, 255, QVariant());
+    iom->sendFeedBack(0, pad1 + 5, 255, QVariant());
+    iom->sendFeedBack(0, 70, 200, QVariant());              // K1 (the GM): no pad
+    QCOMPARE(int(paints().size()), 0);                      // not one per lamp
+    QList<QColor> now = setup->padColours(0);
+    QCOMPARE(int(now.size()), 8);
+    QCOMPARE(now.at(3), QColor(0, 255, 0));                 // GO: green
+    QCOMPARE(now.at(5), QColor(0, 90, 255));                // a free pad: blue
+    QCOMPARE(now.at(0), QColor(0, 0, 0));                   // Shift, unlit
+    settle();
+    QVERIFY(!paints().isEmpty());
+    QCOMPARE(paints().last(), SurfaceSetup::lpd8Mk2Colours(setup->padColours(0)));
+    QVERIFY(int(paints().size()) <= 2);
+    // Dim ("ready"), then off.
+    iom->sendFeedBack(0, pad1 + 3, 30, QVariant());
+    QVERIFY(setup->padColours(0).at(3).green() > 0 && setup->padColours(0).at(3).green() < 64);
+    iom->sendFeedBack(0, pad1 + 3, 0, QVariant());
+    QCOMPARE(setup->padColours(0).at(3), QColor(0, 0, 0));
+    // STOP's lamp is red, Back's amber, Shift's white.
+    iom->sendFeedBack(0, pad1 + 7, 255, QVariant());
+    iom->sendFeedBack(0, pad1 + 2, 255, QVariant());
+    iom->sendFeedBack(0, pad1, 255, QVariant());
+    QCOMPARE(setup->padColours(0).at(7), QColor(255, 0, 0));
+    QCOMPARE(setup->padColours(0).at(2), QColor(255, 150, 0));
+    QCOMPARE(setup->padColours(0).at(0), QColor(255, 255, 255));
+    settle();
+    QCOMPARE(padIn(paints().last(), 7), setup->padColours(0).at(7));
+    // A replug: painted as the app has them, not left in the board's own colours.
+    QVERIFY(board.unplug());
+    m_stub->m_showControlSent.clear();
+    QVERIFY(board.replug());
+    QTRY_VERIFY(!paints().isEmpty());
+    QTRY_VERIFY(!setup->initAgainPending(0));
+    settle(50);
+    QCOMPARE(paints().last(), SurfaceSetup::lpd8Mk2Colours(setup->padColours(0)));
+
+    // The lamp test lights each pad through the same message.
+    m_stub->m_showControlSent.clear();
+    setup->setLampTestStepMs(5);
+    QString why;
+    QVERIFY2(setup->startLampTest(0, &why), qPrintable(why));
+    QTRY_VERIFY_WITH_TIMEOUT(!setup->lampTestRunning(), 3000);
+    bool sawPad1 = false;
+    for (const QByteArray &p : paints())
+        sawPad1 = sawPad1 || padIn(p, 0) != QColor(0, 0, 0);
+    QVERIFY2(sawPad1, "the lamp test never lit Pad 1");
+
+    // The original LPD8 lights by note: never sent the mk2's SysEx.
+    m_stub->m_showControlSent.clear();
+    SimMidiDevice old(m_doc, m_stub, QStringLiteral("LPD8"), 1, QStringLiteral("Akai LPD8"));
+    QVERIFY2(old.plug(), qPrintable(old.lastError()));
+    iom->sendFeedBack(1, 128 + 39, 255, QVariant());
+    settle();
+    for (const auto &sent : std::as_const(m_stub->m_showControlSent))
+        QVERIFY2(sent.first != quint32(old.line()), qPrintable(hex(sent.second)));
 }
 
 void SurfaceSim_Test::anOlderCopyOfASurfaceProfileIsNotUsed()

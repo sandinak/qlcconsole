@@ -273,6 +273,12 @@ QList<VirtualMidiBench::PortSpec> VirtualMidiBench::board(const QString &b)
         return { { "USB2.0-MIDI Port 1", true, true }, { "USB2.0-MIDI Port 2", false, true } };
     if (b == QLatin1String("PMJ Black 1"))
         return { { "OpenDeck | PMJ_BLACK_1", true, true } };
+    // The LPD8 mk2 as CoreMIDI names it (his, on dink 2026-11-28: USB 09e8:004c).
+    if (b == QLatin1String("LPD8 mk2"))
+        return { { "LPD8 mk2", true, true } };
+    // The original LPD8: its USB product name (not seen on his computers yet).
+    if (b == QLatin1String("LPD8"))
+        return { { "LPD8", true, true } };
     if (b == QLatin1String("RTP"))
         return { { "Network RTP Session 1", true, true } };
     return {};

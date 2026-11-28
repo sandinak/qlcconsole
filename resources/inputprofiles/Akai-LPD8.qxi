@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE InputProfile>
+<InputProfile xmlns="http://www.qlcplus.org/InputProfile">
+ <Creator>
+  <Name>Q Light Controller Plus</Name>
+  <Version>4.14.4</Version>
+  <Author>Branson Matheson</Author>
+ </Creator>
+ <!-- The original LPD8 (2009). Program 1 in PAD mode, MIDI channel 1: pads notes 36-43 (bottom row 1-4, top row 5-8), knobs K1-K8 CC 0-7 (Akai's LPD8 Editor User Guide; the knob CCs are not confirmed on a factory unit). A pad lights when it is sent its note. Pad 1 is Shift: Shift + Pad 8 is the stop (docs/features/control-surfaces.md). -->
+ <Manufacturer>Akai</Manufacturer>
+ <Model>LPD8</Model>
+ <Type>MIDI</Type>
+ <Match>LPD8</Match>
+ <Surface Version="1"/>
+ <Channel Number="0">
+  <Name>Knob K1</Name>
+  <Type>Slider</Type>
+  <Role>GrandMaster</Role>
+  <Facts Fader="Absolute"/>
+ </Channel>
+ <Channel Number="1">
+  <Name>Knob K2</Name>
+  <Type>Slider</Type>
+  <Facts Fader="Absolute"/>
+ </Channel>
+ <Channel Number="2">
+  <Name>Knob K3</Name>
+  <Type>Slider</Type>
+  <Facts Fader="Absolute"/>
+ </Channel>
+ <Channel Number="3">
+  <Name>Knob K4</Name>
+  <Type>Slider</Type>
+  <Facts Fader="Absolute"/>
+ </Channel>
+ <Channel Number="4">
+  <Name>Knob K5</Name>
+  <Type>Slider</Type>
+  <Facts Fader="Absolute"/>
+ </Channel>
+ <Channel Number="5">
+  <Name>Knob K6</Name>
+  <Type>Slider</Type>
+  <Facts Fader="Absolute"/>
+ </Channel>
+ <Channel Number="6">
+  <Name>Knob K7</Name>
+  <Type>Slider</Type>
+  <Facts Fader="Absolute"/>
+ </Channel>
+ <Channel Number="7">
+  <Name>Knob K8</Name>
+  <Type>Slider</Type>
+  <Facts Fader="Absolute"/>
+ </Channel>
+ <Channel Number="164">
+  <Name>Pad 1</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="165">
+  <Name>Pad 2</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="166">
+  <Name>Pad 3</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+  <Role>Back</Role>
+ </Channel>
+ <Channel Number="167">
+  <Name>Pad 4</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+  <Role>Go</Role>
+ </Channel>
+ <Channel Number="168">
+  <Name>Pad 5</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="169">
+  <Name>Pad 6</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="170">
+  <Name>Pad 7</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="171">
+  <Name>Pad 8</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+  <Role>EmergencyStop</Role>
+ </Channel>
+</InputProfile>

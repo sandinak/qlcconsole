@@ -519,6 +519,9 @@ void QLCInputProfile_Test::shippedSurfaceTypesHoldTheirRules()
     const Type types[] = {
         { "Akai-APCMini.qxi", 56, FaderFact::Absolute, 210, 211, 217 },
         { "Akai-APCMini-mk2.qxi", 56, FaderFact::Absolute, 240, 241, 247 },
+        // The LPD8s: K1 the Grand Master; Pad 4 GO, Pad 3 Back, Pad 8 the stop (Pad 1 its Shift).
+        { "Akai-LPD8.qxi", 0, FaderFact::Absolute, 128 + 39, 128 + 38, 128 + 43 },
+        { "Akai-LPD8-mk2.qxi", 70, FaderFact::Absolute, (9 << 12) + 128 + 39, (9 << 12) + 128 + 38, (9 << 12) + 128 + 43 },
         { "PMJ-9-Faders-Controller.qxi", 5, FaderFact::Absolute, none, none, none },
         { "KORG-nanoKONTROL2.qxi", 7, FaderFact::Absolute, none, none, none },
         { "Behringer-BCF2000.qxi", 88, FaderFact::Motorised, none, none, none },

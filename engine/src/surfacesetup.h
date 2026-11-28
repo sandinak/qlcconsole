@@ -31,6 +31,7 @@
 #include <QMap>
 #include <QHash>
 #include <QSet>
+#include <QColor>
 
 #include "qlcengine_export.h"
 #include "opendecklink.h"
@@ -89,6 +90,10 @@ public:
         int modeChannel = 0;
         QString modeName;               ///< "Session"
         QString modeHint;               ///< "Press SESSION on the APC64"
+        /** Pads lit by one SysEx for all of them (the LPD8 mk2's RGB pads
+         *  ignore a note sent to them): their profile channels, in the
+         *  message's order. Empty: its lamps are the notes the plugin sends. */
+        QList<quint32> sysExPads;
     };
 
     /** A check's answer. */
@@ -174,6 +179,16 @@ public:
 
     /** The APC64's display text message for @p line (0-2). */
     static QByteArray apc64Text(int line, const QString &text);
+    /** The LPD8 mk2's message painting its 8 pads, 1 to 8 (bottom row, then
+     *  top): F0 47 7F 4C 06 00 30, then R G B of each as two 7-bit bytes
+     *  (v >> 7, v & 7F), F7. A pad missing from @p pads is dark. */
+    static QByteArray lpd8Mk2Colours(const QList<QColor> &pads);
+    /** The colour a SysEx-lit pad of @p universe shows for a lamp value
+     *  (0-255) on @p channel: its job's colour (GO green, Back amber, STOP
+     *  red, Shift white, any other blue), as bright as the value. */
+    QColor padColour(quint32 universe, quint32 channel, uchar value) const;
+    /** What @p universe's SysEx-lit pads show now (empty: none). */
+    QList<QColor> padColours(quint32 universe) const { return m_padColours.value(universe); }
 
     /* ---- writes: only from a button a person pressed ---- */
 
@@ -231,8 +246,17 @@ private slots:
     void slotPatchChanged(quint32 universe);
     void slotWoke();
     void slotInput(quint32 universe, quint32 channel, uchar value);
+    void slotFeedbackSent(quint32 universe, quint32 channel, uchar value);
 
 private:
+    /** A lamp of a board whose pads are lit by SysEx: kept, and the whole
+     *  board painted once the lamps of this turn of the event loop are in. */
+    void paintPad(quint32 universe, quint32 channel, uchar value);
+    void flushPads();
+    QHash<quint32, QList<QColor>> m_padColours;
+    QSet<quint32> m_padsDirty;
+    bool m_padFlushQueued = false;
+
     bool sendTo(quint32 universe, const QByteArray &msg, const QString &why = QStringLiteral("setup"));
     QString deviceKey(quint32 universe) const;
     QString backup(quint32 universe, const QString &why, QString *error);

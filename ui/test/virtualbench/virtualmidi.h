@@ -114,6 +114,8 @@ public:
     /** A board's ports: { name, source?, destination? }. */
     struct PortSpec { QString name; bool source; bool destination; };
     static QList<PortSpec> board(const QString &board);
+    /** The boards every bench test may plug (the LPD8s are plugged by their
+     *  own tests only, which step aside for a real one). */
     static QStringList boards();
 
     /** Every name CoreMIDI lists now (sources, destinations): what any MIDI
