@@ -701,7 +701,8 @@ void ShowManager_Test::aDropOnAScrolledTimelineLandsWhereItIsShown()
     QVERIFY2(qAbs(qint64(t) - qint64(shown)) <= 1000, qPrintable(QString("%1 vs %2").arg(t).arg(shown)));
 
     // A function dragged from the sidebar onto the column: refused too.
-    QSignalSpy dropped(v, &MultiTrackView::functionDropped);
+    // By name: MultiTrackView is not exported from the UI library (dllsignals_test).
+    QSignalSpy dropped(v, SIGNAL(functionDropped(quint32,quint32,Track*)));
     QMimeData md;
     QByteArray data;
     QDataStream out(&data, QIODevice::WriteOnly);
