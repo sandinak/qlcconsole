@@ -468,8 +468,15 @@ void PlotSheet::paintDrawing(QPainter *p, const Layout &l) const
         QList<QPair<QGraphicsItem *, QTransform> > fixedSize;
         if (qAbs(grow - 1.0) > 0.01)
         {
+            auto underFixed = [](QGraphicsItem *it) {
+                for (QGraphicsItem *up = it->parentItem(); up != nullptr; up = up->parentItem())
+                    if (up->flags() & QGraphicsItem::ItemIgnoresTransformations)
+                        return true;
+                return false;
+            };
+            // The outermost of each: a child of one is scaled with it.
             for (QGraphicsItem *it : v->scene()->items())
-                if (it->flags() & QGraphicsItem::ItemIgnoresTransformations)
+                if ((it->flags() & QGraphicsItem::ItemIgnoresTransformations) && !underFixed(it))
                 {
                     fixedSize << qMakePair(it, it->transform());
                     it->setTransform(it->transform() * QTransform::fromScale(grow, grow));
