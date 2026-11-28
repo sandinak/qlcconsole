@@ -1076,6 +1076,12 @@ private:
      *  this frame has them (m_drapeKey). */
     void applyDrivenDrapes(const QVector3D &apex, const QVector3D &dir, Throw &t) const;
     mutable QHash<ThrowKey, Throw> m_throws;
+    /** The most landings kept: past it they are let go of, all at once.
+     *  Below it, rays no longer thrown stay until they are most of what is
+     *  kept -- and the table keeps the room it grew to (a QHash does not
+     *  shrink): its memory steps up with the rays thrown, to this cap,
+     *  never with time alone (ShowScale_Test::memoryStaysFlatOverAMinute). */
+    static constexpr int kKeptThrowsMax = 400000;
     mutable quint64 m_throwScene = 0;
     mutable quint64 m_drapeKey = 0;       ///< this frame's driven curtain poses
     /** Each piece of scenery shown, with the box it stands in this frame:

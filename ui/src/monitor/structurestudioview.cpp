@@ -11221,7 +11221,7 @@ void StructureStudioView::paintEvent(QPaintEvent *)
        changed. Rays no longer thrown (a mover that has moved on) are let go
        once they are most of what is kept. */
     const quint64 scene = throwScene();
-    if (scene != m_throwScene || m_throws.size() > 400000)
+    if (scene != m_throwScene || m_throws.size() > kKeptThrowsMax)
     {
         m_throws.clear();
         m_beamMeshes.clear();

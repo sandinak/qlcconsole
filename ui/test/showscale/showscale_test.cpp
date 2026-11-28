@@ -697,11 +697,32 @@ void ShowScale_Test::whereAFrameGoes()
    it takes the time the work does, not a minute: the timer's tick, every
    universe's frame, the values to the rig views as the app hands them
    over, a GO every two seconds. Resident memory after it against the show
-   loaded; and no growth over the second half (sampled every 5 s). */
+   loaded; and no growth over the second half (sampled every 5 s).
+
+   The Rig Overview is closed for it. What it keeps from frame to frame --
+   where each beam's rays landed (StructureStudioView::m_throws) -- grows
+   with the rays the show has it throw, up to its cap, and keeps the room
+   it grew to (a QHash does not shrink): it steps up 5-30 MB at a time,
+   whenever the beams the show lights and moves have thrown more rays than
+   it has room for. When that falls in the second half is the show's order
+   and the machine's pace, not a leak: GitHub's macOS runner (2026-11-28)
+   stepped up 7 MB at 35 s; on newaudio, over 300 s, its table grew to
+   43 MB by 145 s and then held; with the overview closed the same 300 s
+   were flat to 0.3 MB. So the overview is held to its cap (below), and
+   the rest of the app -- the engine, the scripts, the 2D plot drawing --
+   to flat. */
 void ShowScale_Test::memoryStaysFlatOverAMinute()
 {
     Doc *doc = m_app->doc();
     MasterTimer *mt = doc->masterTimer();
+    Monitor *mon = Monitor::instance();
+    QVERIFY(mon != nullptr);
+    StructureStudioView *overview = mon->stageOverviewView(false);
+    QVERIFY(overview != nullptr);           // open since theStudioAndOverviewKeepUp
+    QVERIFY(overview->m_throws.size() <= StructureStudioView::kKeptThrowsMax);
+    overview->window()->close();
+    m_app->m_tab->setCurrentWidget(mon);    // the plot draws on
+    settle(200);
     mt->stop();                             // the frames are ours now
     startShow();
     const int perSecond = int(MasterTimer::frequency());
