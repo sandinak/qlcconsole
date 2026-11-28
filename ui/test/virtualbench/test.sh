@@ -8,6 +8,9 @@ export DYLD_FALLBACK_LIBRARY_PATH=../../src:../../../engine/src:../../../webacce
 export QT_LOGGING_RULES="default.debug=false"
 if [ -x ./virtualbench_test.app/Contents/MacOS/virtualbench_test ]; then
     exec ./virtualbench_test.app/Contents/MacOS/virtualbench_test -maxwarnings 0
-else
+elif [ -x ./virtualbench_test ]; then
     exec ./virtualbench_test -maxwarnings 0
+else
+    # CoreMIDI only: not built off macOS (ui/test/CMakeLists.txt).
+    echo "Nothing to test here (the virtual bench is macOS only)."
 fi
